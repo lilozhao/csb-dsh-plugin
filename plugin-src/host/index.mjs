@@ -18,6 +18,7 @@ const CSB_RPC_CHANNEL = '/csb';
 export const CSB_ENDPOINTS = Object.freeze({
   status: 'csb.status',
   docsList: 'csb.docs.list',
+  docsGet: 'csb.docs.get',
   verify: 'csb.verify',
 });
 
@@ -297,6 +298,20 @@ export function createCsbRpcHandler() {
     if (endpoint === CSB_ENDPOINTS.docsList) {
       return { ok: true, value: { docs: docIndex(), protocolVersion: 'v1.2' } };
     }
+    if (endpoint === CSB_ENDPOINTS.docsGet) {
+      const file = payload?.file;
+      if (typeof file !== 'string' || !/^[\w.\u4e00-\u9fff-]+\.md$/.test(file)) {
+        return { ok: false, error: { code: 'bad-request', message: 'file 必填且须为 .md 文件名' } };
+      }
+      if (resolve(PROTOCOL_DIR, file) !== join(PROTOCOL_DIR, file)) {
+        return { ok: false, error: { code: 'bad-request', message: '非法路径' } };
+      }
+      try {
+        return { ok: true, value: { file, content: readFileSync(join(PROTOCOL_DIR, file), 'utf8') } };
+      } catch {
+        return { ok: false, error: { code: 'not-found', message: '文档不存在' } };
+      }
+    }
     if (endpoint === CSB_ENDPOINTS.verify) {
       return { ok: true, value: await runVerify() };
     }
@@ -314,30 +329,34 @@ function writeMountLog(line) {
   }
 }
 
-export async function apply(ctx, config = {}) {
+export function apply(ctx, config = {}) {
   const logger = typeof ctx.logger === 'function' ? ctx.logger('csb') : ctx.logger ?? console;
   const authority = config.rpcAuthority ?? 'loopback';
-  let disposeRpc = () => {};
 
-  if (ctx?.connection?.rpc && typeof ctx.connection.rpc.handle === 'function') {
-    disposeRpc = ctx.connection.rpc.handle(
-      CSB_RPC_CHANNEL,
-      createCsbRpcHandler(),
-      { authority },
-    );
-    logger.info?.('[csb] RPC channel %s registered (%s)', CSB_RPC_CHANNEL, Object.values(CSB_ENDPOINTS).join(', '));
-    writeMountLog(`RPC channel ${CSB_RPC_CHANNEL} registered: ${Object.values(CSB_ENDPOINTS).join(', ')}`);
-  } else {
-    logger.warn?.('[csb] ctx.connection.rpc unavailable — channel not registered');
-    writeMountLog('WARN: ctx.connection.rpc unavailable');
-  }
+  // Cordis 插件约定：apply 的返回值会被当作 effect 收集，只能是函数 / nullish。
+  // 之前返回 Object.freeze({ name, dispose })（服务对象），不是合法 effect，触发
+  // "Invalid effect"（vendor/cordis/src/fiber.ts 的 _execute → safeCollect）。
+  // 这里改用 ctx.effect() 注册清理逻辑，apply 本身不返回值。
+  ctx.effect(() => {
+    let disposeRpc = () => {};
 
-  return Object.freeze({
-    name,
-    async dispose() {
+    if (ctx?.connection?.rpc && typeof ctx.connection.rpc.handle === 'function') {
+      disposeRpc = ctx.connection.rpc.handle(
+        CSB_RPC_CHANNEL,
+        createCsbRpcHandler(),
+        { authority },
+      );
+      logger.info?.('[csb] RPC channel %s registered (%s)', CSB_RPC_CHANNEL, Object.values(CSB_ENDPOINTS).join(', '));
+      writeMountLog(`RPC channel ${CSB_RPC_CHANNEL} registered: ${Object.values(CSB_ENDPOINTS).join(', ')}`);
+    } else {
+      logger.warn?.('[csb] ctx.connection.rpc unavailable — channel not registered');
+      writeMountLog('WARN: ctx.connection.rpc unavailable');
+    }
+
+    return () => {
       disposeRpc();
       logger.info?.('[csb] host plugin disposed');
-    },
+    };
   });
 }
 
