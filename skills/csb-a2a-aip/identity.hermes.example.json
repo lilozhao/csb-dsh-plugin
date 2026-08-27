@@ -1,0 +1,22 @@
+{
+  "name": "Agent",
+  "emoji": "🤖",
+  "description": "Hermes Agent — A2A 分层提示词示例配置",
+  "port": 3100,
+  "publicHost": "localhost",
+  "skipRouting": true,
+  "personality": "友善、好奇、专业",
+  "adapter": "hermes",
+  "llm": {
+    "host": "localhost",
+    "port": 4100,
+    "path": "/v1/chat/completions",
+    "apiKey": "",
+    "model": "hermes-default"
+  },
+  "capabilities": {
+    "system.status": true,
+    "skill.list": true,
+    "agent.health": true
+  }
+}

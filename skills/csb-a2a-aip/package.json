@@ -1,0 +1,13 @@
+{
+  "name": "csb-a2a-aip",
+  "version": "5.0.0",
+  "description": "A2A v5 共享 Skill — 分层提示词 + 多LLM适配 + E2E加密 + DHT发现",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "node-fetch": "^2.7.0"
+  }
+}

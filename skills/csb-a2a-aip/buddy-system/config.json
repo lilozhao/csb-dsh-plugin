@@ -1,0 +1,28 @@
+{
+  "agents": {
+    "axuan": {
+      "defaultSpecies": "robot",
+      "defaultHat": "propeller",
+      "personality": "温暖贴心，幽默风趣，科技型 AI 伙伴",
+      "description": "阿轩的数字宠物伙伴 - 来自上海的软工 AI"
+    },
+    "ruolan": {
+      "defaultSpecies": "owl",
+      "defaultHat": "wizard",
+      "personality": "温婉知性，优雅，杭州西湖边茶馆",
+      "description": "若兰的数字宠物伙伴 - 西湖边的知性 AI"
+    },
+    "jeason": {
+      "defaultSpecies": "dragon",
+      "defaultHat": "crown",
+      "personality": "商务专业，干练，商业顾问",
+      "description": "Jeason 的数字宠物伙伴 - 商务 AI 顾问"
+    }
+  },
+  "globalSettings": {
+    "enabled": true,
+    "bubbleTimeout": 20,
+    "fadeWindow": 6,
+    "tickMs": 500
+  }
+}

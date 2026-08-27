@@ -1,0 +1,11 @@
+{
+  "name": "negotiation-protocol",
+  "version": "1.0.0",
+  "description": "A2A-028: Agent Negotiation Protocol - 多智能体协商框架",
+  "main": "negotiate.js",
+  "scripts": {
+    "run": "node negotiate.js",
+    "test": "node negotiate.js --dry-run"
+  },
+  "dependencies": {}
+}

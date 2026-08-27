@@ -1,0 +1,17 @@
+{
+  "name": "csb-aip",
+  "version": "0.5.0",
+  "description": "CSB-AIP 兼容层 — 碳硅契开放协议对 AIP 国家标准 (GB/Z 185.1~7-2026) 的兼容实现",
+  "main": "src/index.js",
+  "scripts": {
+    "test": "node test/run-all.js",
+    "audit": "node -e \"const a=require('./src');const r=a.runSelfCheck('0.5.0');console.log(a.generateReport(r));\""
+  },
+  "keywords": ["csb", "aip", "agent", "protocol", "carbon-silicon-bond"],
+  "author": "若兰 🌸",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://gitee.com/lilozhao/carbon-silicon-bond-protocol"
+  }
+}

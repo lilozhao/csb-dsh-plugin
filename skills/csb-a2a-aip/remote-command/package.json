@@ -1,0 +1,28 @@
+{
+  "name": "a2a-remote-command",
+  "version": "1.0.0",
+  "description": "A2A 远程命令执行技能 - 支持跨智能体安全命令调用",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "test": "node test/test.js"
+  },
+  "keywords": [
+    "a2a",
+    "remote-command",
+    "agent",
+    "openclaw"
+  ],
+  "author": "若兰 🌸",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {},
+  "peerDependencies": {},
+  "env": {
+    "A2A_SHARED_SECRET": "A2A 通信共享密钥（用于签名验证）",
+    "WORKSPACE_PATH": "工作空间路径（默认: /home/node/.openclaw/workspace）",
+    "A2A_WHITELIST": "JSON 格式白名单配置"
+  }
+}

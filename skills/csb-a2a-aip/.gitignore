@@ -1,0 +1,22 @@
+# Dependencies
+node_modules/
+
+# Logs
+logs/
+*.log
+
+# Sensitive files - NEVER commit these
+identity.json
+.env
+.env.*
+*.pem
+*.key
+
+# Heritage registry data - each agent has its own
+heritage-registry.json
+
+# Temp files
+*.tmp
+*.pid
+.DS_Store*.bak
+*.jpeg
