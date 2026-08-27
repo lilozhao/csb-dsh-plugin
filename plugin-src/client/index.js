@@ -1,6 +1,7 @@
-// @csb/dsh-plugin · client 侧「碳硅契 CSB」设置页（M3）
+// @csb/dsh-plugin · client 侧「碳硅契 CSB」设置页（M4: 全家桶）
 //
-// 面板三块:状态卡(csb.status) · 协议文档树(csb.docs.list / csb.docs.get) · 自检(csb.verify)
+// 面板:状态卡(csb.status) · 服务(csb.service.list/start/stop) · 文档树四分类
+//      (csb.docs.list / csb.docs.get) · 自检(csb.verify) · 记忆概览(csb.memory.status)
 // 调用模式参照 @xmanrui/dsh-im:apply 里注册 'settings.plugins.tab' 插槽,
 // inject 注入 rpcCall,组件用 h() 无 JSX 风格(与 esbuild 构建匹配)。
 
@@ -15,6 +16,10 @@ const ENDPOINTS = Object.freeze({
   docsList: 'csb.docs.list',
   docsGet: 'csb.docs.get',
   verify: 'csb.verify',
+  serviceList: 'csb.service.list',
+  serviceStart: 'csb.service.start',
+  serviceStop: 'csb.service.stop',
+  memoryStatus: 'csb.memory.status',
 });
 
 const h = React.createElement;
@@ -43,8 +48,12 @@ const styles = {
   title: { fontSize: 14, fontWeight: 600, margin: '0 0 8px' },
   docItem: { padding: '6px 10px', cursor: 'pointer', borderRadius: 6, fontSize: 13 },
   docItemHover: { background: 'rgba(128,128,128,.12)' },
+  tabBar: { display: 'flex', gap: 6, marginBottom: 8, flexWrap: 'wrap' },
+  tab: { padding: '4px 12px', borderRadius: 12, border: '1px solid rgba(128,128,128,.35)', background: 'transparent', cursor: 'pointer', fontSize: 12, color: 'inherit' },
+  tabActive: { padding: '4px 12px', borderRadius: 12, border: '1px solid rgba(128,128,128,.6)', background: 'rgba(128,128,128,.18)', cursor: 'pointer', fontSize: 12, fontWeight: 600, color: 'inherit' },
   pre: { maxHeight: 320, overflow: 'auto', background: 'rgba(0,0,0,.35)', border: '1px solid rgba(128,128,128,.2)', borderRadius: 8, padding: 10, fontSize: 12, whiteSpace: 'pre-wrap', wordBreak: 'break-word' },
   btn: { padding: '6px 14px', borderRadius: 6, border: '1px solid rgba(128,128,128,.4)', background: 'rgba(128,128,128,.12)', cursor: 'pointer', fontSize: 13, color: 'inherit' },
+  btnDanger: { padding: '6px 14px', borderRadius: 6, border: '1px solid rgba(248,81,73,.5)', background: 'rgba(248,81,73,.12)', cursor: 'pointer', fontSize: 13, color: '#f85149' },
   error: { color: '#f85149', fontSize: 13 },
   muted: { color: 'rgba(128,128,128,.7)', fontSize: 12 },
 };
@@ -60,7 +69,7 @@ function Row({ label, value, badge }) {
   );
 }
 
-function StatusCard({ status }) {
+function StatusCard({ status, memory }) {
   if (!status) return h('div', { style: styles.card }, '加载中…');
   const hs = status.handshake ?? {};
   const llm = status.llm ?? {};
@@ -71,23 +80,55 @@ function StatusCard({ status }) {
     h(Row, { label: '用户公钥', value: hs.userPubkeyKid ?? null, badge: { ok: hs.userPubkeyConfigured, text: hs.userPubkeyConfigured ? '已配置' : '未配置' } }),
     h(Row, { label: '注册表', value: status.registry ? `${status.registry.ip}:${status.registry.port}` : null, badge: { ok: status.registry?.status === 'up', text: status.registry?.status ?? '未知' } }),
     h(Row, { label: 'LLM', value: llm.model ?? null, badge: { ok: llm.configured, text: llm.configured ? '已配置' : '未配置' } }),
+    h(Row, { label: 'CSB 记忆', value: memory?.sizeHuman ?? null, badge: { ok: memory?.configured, text: memory?.configured ? '可用' : '未发现' } }),
     h(Row, { label: '协议版本', value: status.csbProtocolVersion ?? null }),
     h('div', { style: styles.muted }, `插件 v${status.pluginVersion ?? '?'} · 服务器 ${status.server ?? ''}`),
   );
 }
 
-function DocsPanel({ docs, openFile, content, loading, onOpen }) {
+function ServicesPanel({ services, busy, onStart, onStop }) {
   return h('div', { style: styles.card },
-    h('div', { style: styles.title }, '协议文档'),
-    !docs ? h('div', null, '加载中…')
-      : docs.length === 0 ? h('div', { style: styles.muted }, '暂无文档')
-      : docs.map((d) =>
+    h('div', { style: styles.title }, '服务(独立进程)'),
+    !services ? h('div', null, '加载中…')
+      : services.map((s) =>
+          h('div', { key: s.id, style: styles.row },
+            h('span', { style: styles.label }, `${s.name} (:${s.port})`),
+            h('span', null,
+              h(Badge, { ok: s.reachable, text: s.reachable ? (s.identity ?? '在线') : '离线' }),
+              s.handshakeEnabled !== null ? h('span', { style: styles.muted }, ` 握手:${s.handshakeEnabled ? '✅' : '❌'}`) : null,
+              s.pid ? h('span', { style: styles.muted }, ` PID:${s.pid}`) : null,
+            ),
+          ),
+        ),
+    h('div', { style: { marginTop: 8, display: 'flex', gap: 8 } },
+      h('button', { style: styles.btn, onClick: onStart, disabled: busy }, '启动 A2A'),
+      h('button', { style: styles.btnDanger, onClick: onStop, disabled: busy }, '停止 A2A'),
+    ),
+  );
+}
+
+function DocsPanel({ sections, activeSection, openFile, content, loading, onSelectSection, onOpen }) {
+  const active = sections?.find((s) => s.id === activeSection);
+  return h('div', { style: styles.card },
+    h('div', { style: styles.title }, '文档(协议/宪章/记忆/评测)'),
+    sections ? h('div', { style: styles.tabBar },
+      sections.map((s) =>
+        h('button', {
+          key: s.id,
+          style: s.id === activeSection ? styles.tabActive : styles.tab,
+          onClick: () => onSelectSection(s.id),
+        }, `${s.title} (${s.docs.length})`),
+      ),
+    ) : null,
+    !active ? h('div', null, '加载中…')
+      : active.docs.length === 0 ? h('div', { style: styles.muted }, '该分类暂无文档')
+      : active.docs.map((d) =>
           h('div', {
             key: d.file,
             style: openFile === d.file ? { ...styles.docItem, ...styles.docItemHover } : styles.docItem,
             onMouseEnter: (e) => { e.currentTarget.style.background = 'rgba(128,128,128,.12)'; },
             onMouseLeave: (e) => { e.currentTarget.style.background = 'transparent'; },
-            onClick: () => onOpen(d.file),
+            onClick: () => onOpen(activeSection, d.file),
           },
             h('span', null, '📄 '),
             h('span', null, d.title),
@@ -95,7 +136,7 @@ function DocsPanel({ docs, openFile, content, loading, onOpen }) {
           ),
         ),
     openFile ? h('div', { style: { marginTop: 10 } },
-      h('div', { style: { ...styles.title, fontSize: 13 } }, openFile),
+      h('div', { style: { ...styles.title, fontSize: 13 } }, `${activeSection}/${openFile}`),
       content === null
         ? h('div', { style: styles.muted }, loading ? '加载中…' : '')
         : h('pre', { style: styles.pre }, content),
@@ -125,7 +166,10 @@ function VerifyPanel({ verify, busy, onRun }) {
 
 function CsbPanel({ rpcCall }) {
   const [status, setStatus] = React.useState(null);
-  const [docs, setDocs] = React.useState(null);
+  const [memory, setMemory] = React.useState(null);
+  const [services, setServices] = React.useState(null);
+  const [sections, setSections] = React.useState(null);
+  const [activeSection, setActiveSection] = React.useState('protocol');
   const [openFile, setOpenFile] = React.useState(null);
   const [content, setContent] = React.useState(null);
   const [loading, setLoading] = React.useState(false);
@@ -137,13 +181,17 @@ function CsbPanel({ rpcCall }) {
     let cancelled = false;
     (async () => {
       try {
-        const [s, d] = await Promise.all([
+        const [s, d, sv, mem] = await Promise.all([
           rpcCall(ENDPOINTS.status, {}).then(unwrap),
           rpcCall(ENDPOINTS.docsList, {}).then(unwrap),
+          rpcCall(ENDPOINTS.serviceList, {}).then(unwrap),
+          rpcCall(ENDPOINTS.memoryStatus, {}).then(unwrap).catch(() => null),
         ]);
         if (!cancelled) {
           setStatus(s);
-          setDocs(d.docs);
+          setSections(d.sections);
+          setServices(sv.services);
+          setMemory(mem);
         }
       } catch (e) {
         if (!cancelled) setError(e.message);
@@ -153,17 +201,27 @@ function CsbPanel({ rpcCall }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const openDoc = async (file) => {
+  const openDoc = async (section, file) => {
+    setActiveSection(section);
     setOpenFile(file);
     setContent(null);
     setLoading(true);
     try {
-      const v = await rpcCall(ENDPOINTS.docsGet, { file }).then(unwrap);
+      const v = await rpcCall(ENDPOINTS.docsGet, { section, file }).then(unwrap);
       setContent(v.content);
     } catch (e) {
       setContent(`加载失败: ${e.message}`);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const refreshServices = async () => {
+    try {
+      const sv = await rpcCall(ENDPOINTS.serviceList, {}).then(unwrap);
+      setServices(sv.services);
+    } catch (e) {
+      setError(e.message);
     }
   };
 
@@ -180,10 +238,37 @@ function CsbPanel({ rpcCall }) {
     }
   };
 
+  const startA2a = async () => {
+    setBusy(true);
+    try {
+      const r = await rpcCall(ENDPOINTS.serviceStart, {}).then(unwrap);
+      setError(r.started ? null : `启动提示: ${r.message}`);
+      await refreshServices();
+    } catch (e) {
+      setError(`启动失败: ${e.message}`);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const stopA2a = async () => {
+    setBusy(true);
+    try {
+      const r = await rpcCall(ENDPOINTS.serviceStop, {}).then(unwrap);
+      setError(r.stopped ? null : `停止提示: ${r.message}`);
+      await refreshServices();
+    } catch (e) {
+      setError(`停止失败: ${e.message}`);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return h('div', { style: { padding: '4px 0' } },
-    error ? h('div', { style: styles.error }, `碳硅契服务不可用: ${error}`) : null,
-    h('div', { style: styles.section }, h(StatusCard, { status })),
-    h('div', { style: styles.section }, h(DocsPanel, { docs, openFile, content, loading, onOpen: openDoc })),
+    error ? h('div', { style: styles.error }, `碳硅契提示: ${error}`) : null,
+    h('div', { style: styles.section }, h(StatusCard, { status, memory })),
+    h('div', { style: styles.section }, h(ServicesPanel, { services, busy, onStart: startA2a, onStop: stopA2a })),
+    h('div', { style: styles.section }, h(DocsPanel, { sections, activeSection, openFile, content, loading, onSelectSection: setActiveSection, onOpen: openDoc })),
     h('div', { style: styles.section }, h(VerifyPanel, { verify, busy, onRun: runVerify })),
   );
 }
