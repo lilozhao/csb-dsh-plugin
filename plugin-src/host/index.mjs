@@ -18,7 +18,11 @@ import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
 
 export const name = 'csb-host';
-export const inject = ['connection', 'webServer'];
+// ⚠️ Cordis 硬约束:apply 里访问的每个 ctx.xxx 必须在此声明,用哪个加哪个,用不到别乱加。
+//   ctx.connection → connection;ctx.skills → skills。
+//   教训(2026-08-27):M4 加 ctx.skills.register() 时漏加 'skills',导致 web 启动失败、
+//   3080 不可访问(DSH-澈 从宿主侧补上修复;webServer 从未使用,已清理)。
+export const inject = ['connection', 'skills'];
 
 const CSB_RPC_CHANNEL = '/csb';
 export const CSB_ENDPOINTS = Object.freeze({
