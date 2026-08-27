@@ -16,8 +16,8 @@ await build({
   platform: 'node',
   target: ['node22'],
   mainFields: ['module', 'main'],
-  // M2 起把 csb-security 加入 external（运行时从 node_modules 解析，随插件安装链接）
-  external: [],
+  // csb-security 运行时从 node_modules 解析(随插件安装链接;ruolan-memory 只读挂载可读)
+  external: ['csb-security', 'csb-security/*'],
   outfile: outputPath,
   banner: {
     js: [

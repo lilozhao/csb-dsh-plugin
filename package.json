@@ -34,7 +34,9 @@
   "engines": {
     "node": ">=22.19"
   },
-  "dependencies": {},
+  "dependencies": {
+    "csb-security": "file:../csb-security"
+  },
   "devDependencies": {
     "esbuild": "^0.25.9"
   }
