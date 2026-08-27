@@ -1,0 +1,3 @@
+- insert:
+    - id: csb-dsh-plugin
+      name: '@csb/dsh-plugin'

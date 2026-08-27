@@ -1,0 +1,41 @@
+{
+  "name": "@csb/dsh-plugin",
+  "version": "0.1.0",
+  "description": "碳硅契（CSB）套件的 DeepSeek Harness 插件：协议文档 + CSB 状态面板 + csb-security 集成 + CSB skills。",
+  "keywords": ["deepseek-harness", "dsh", "dsh-plugin", "csb", "carbon-silicon-bond", "a2a"],
+  "license": "MIT",
+  "type": "module",
+  "main": "./lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json"
+  },
+  "files": ["assets", "cordis.patch.yml", "lib", "plugin-src", "LICENSE", "README.md"],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-client-connection",
+        "@deepseek-ai/dsh-client-runtime",
+        "@deepseek-ai/dsh-client-ui-settings",
+        "@deepseek-ai/dsh-client-ui-slots",
+        "@deepseek-ai/dsh-client-locale"
+      ],
+      "platform": "web"
+    }
+  },
+  "scripts": {
+    "build": "node plugin-src/client/build.mjs && node plugin-src/host/build.mjs",
+    "check": "node scripts/verify-package.mjs"
+  },
+  "engines": {
+    "node": ">=22.19"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "esbuild": "^0.25.9"
+  }
+}
