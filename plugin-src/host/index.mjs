@@ -16,6 +16,8 @@ import { readFileSync, readdirSync, appendFileSync, mkdirSync, statSync } from '
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
+// vendored 零依赖库(M5:自包含打包,不依赖工作区路径,可分发)
+import csbSecurity from '../../vendor/csb-security-lib/index.js';
 
 export const name = 'csb-host';
 // ⚠️ Cordis 硬约束:apply 里访问的每个 ctx.xxx 必须在此声明,用哪个加哪个,用不到别乱加。
@@ -253,13 +255,6 @@ function logWarningCheck() {
   }
 }
 
-async function loadCsbSecurity() {
-  // 构建产物里 build.mjs 注入了 require shim;独立单测(ESM)下用 import + CJS 互操作
-  if (typeof require === 'function') return require('csb-security');
-  const mod = await import('csb-security');
-  return mod.default ?? mod;
-}
-
 /**
  * 自检:仿 UPGRADE-QUICK-SECURITY.md 5 条 + AID 签名校验(csb-security 集成)
  */
@@ -290,7 +285,9 @@ async function runVerify() {
     detail: log.clean ? (log.error ?? '无警告') : `命中: ${log.matches.join(' | ')}`,
   });
   const pubkey = parseUserPubkey();
-  const yilan = readJson('/workspace/ruolan-memory/csb-security/data/yilan-user-pub.json');
+  const yilan = readJson(
+    process.env.CSB_YILAN_PUB_FILE ?? join(PACKAGE_ROOT, 'vendor', 'yilan-user-pub.json'),
+  );
   const keyMatches = Boolean(pubkey && yilan && pubkey.x === yilan.x && pubkey.kid === yilan.kid);
   checks.push({
     id: 5, label: '统一用户公钥',
@@ -304,7 +301,6 @@ async function runVerify() {
   if (aidPath) {
     try {
       const aid = readJson(aidPath);
-      const csbSecurity = await loadCsbSecurity();
       const { verifyAID } = csbSecurity.aid;
       const result = verifyAID(aid);
       aidSignature = {

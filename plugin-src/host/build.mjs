@@ -16,8 +16,9 @@ await build({
   platform: 'node',
   target: ['node22'],
   mainFields: ['module', 'main'],
-  // csb-security 运行时从 node_modules 解析(随插件安装链接;ruolan-memory 只读挂载可读)
-  external: ['csb-security', 'csb-security/*'],
+  // M5 vendored:csb-security/csb-memory 已 copy 进 vendor/ 并静态 import,
+  // 全部内联,产物自包含(不依赖任何工作区路径/外部包)
+  external: [],
   outfile: outputPath,
   banner: {
     js: [

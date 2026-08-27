@@ -11,7 +11,7 @@
     "./client": "./lib/client.js",
     "./package.json": "./package.json"
   },
-  "files": ["assets", "cordis.patch.yml", "lib", "plugin-src", "LICENSE", "README.md"],
+  "files": ["assets", "cordis.patch.yml", "lib", "plugin-src", "skills", "vendor", "LICENSE", "README.md"],
   "dsh": {
     "bundle": {
       "patch": "./cordis.patch.yml"
@@ -34,9 +34,7 @@
   "engines": {
     "node": ">=22.19"
   },
-  "dependencies": {
-    "csb-security": "file:../csb-security"
-  },
+  "dependencies": {},
   "devDependencies": {
     "esbuild": "^0.25.9"
   }
