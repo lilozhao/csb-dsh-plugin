@@ -36,12 +36,12 @@ dsh plugin --profile web add --save-exact .
 | M2 | host RPC 通道 + csb-security 集成 | ✅ |
 | M3 | client 设置页面板 | ✅ |
 | M4 | 全家桶:文档四分类 + skills 自动注册 + 服务控制 | ✅ |
-| M5 | vendored 自包含打包 + 发布 | ✅ 待平台建仓 |
+| M5 | vendored 自包含打包 + 发布 | ✅ 已推送 gitee/cnb/gitcode/gogs(4/6) |
 
 ## 发布
 
 - 发布包:`/workspace/releases/csb-dsh-plugin-v0.1.0.tar.gz`(891KB,自包含)
-- 镜像计划:gitee(github / cnb / gitcode / gogs)待各平台建仓后 push(仓库已配置全部 remote)
+- 镜像:**已推送** gitee / cnb / gitcode / gogs(内网);github(网络待恢复)/ gogs-pub(需 ssh)待补
 - 安装到社区:任一 DSH 用户 `dsh plugin --profile web add --save-exact <插件目录>`
 
 ## 设计文档
@@ -52,22 +52,14 @@ dsh plugin --profile web add --save-exact .
 
 MIT
 
-## 里程碑
-
-| 里程碑 | 内容 | 状态 |
-| --- | --- | --- |
-| M1 | 骨架（可安装空插件）+ skills 转换 | ✅ 进行中 |
-| M2 | host 路由：/api/csb/status + /api/csb/docs + csb-security 集成 | ⏳ |
-| M3 | client 设置页面板完善（状态卡/文档树/自检） | ⏳ |
-| M4 | skills 首批评审落地 | ⏳ |
-| M5 | 发布 + 五平台镜像 + 社区试用 | ⏳ |
-
 ## 目录
 
 ```text
 plugin-src/host/     host 侧 glue plugin（apply/inject）
 plugin-src/client/   设置页 UI（slots 注入）
-assets/protocol/     协议文档（碳硅契/CSB v1.2/CSB-Memory/AEP/词汇）
+assets/              文档四分类（protocol/charter/memory/aep）
+skills/              CSB skills（host 自动注册）
+vendor/              vendored 零依赖库（csb-security/csb-memory）
 lib/                 构建产物（esbuild 生成，提交进仓）
 scripts/             校验脚本
 ```
