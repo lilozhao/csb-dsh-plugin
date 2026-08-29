@@ -6,16 +6,18 @@
 //   csb.docs.get      → 读取单个文档(section + file)
 //   csb.verify        → 自检(6 条,含 csb-security AID 签名校验)
 //   csb.service.list  → 服务状态(3100 server_v5 / 3110 aep)
-//   csb.service.start → 启动 A2A server(调 start-ruozhuo-a2a.sh,独立进程)
+//   csb.service.start → 启动 A2A server(调 start-aqi-a2a.sh,独立进程)
 //   csb.service.stop  → 停止 A2A server
 //   csb.memory.status → csb-memory 数据概览
 //
 // 设计原则: 服务独立进程(web 重启不拖垮 A2A) · Secret 只读环境变量 · authority=loopback
 
-import { readFileSync, readdirSync, appendFileSync, mkdirSync, statSync } from 'node:fs';
+import { readFileSync, writeFileSync, readdirSync, appendFileSync, mkdirSync, statSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
+import os from 'node:os';
+import { generateKeyPairSync, createPrivateKey, createPublicKey, sign } from 'node:crypto';
 // vendored 零依赖库(M5:自包含打包,不依赖工作区路径,可分发)
 import csbSecurity from '../../vendor/csb-security-lib/index.js';
 
@@ -49,19 +51,60 @@ const ASSET_SECTIONS = Object.freeze([
   { id: 'aep', dir: 'aep', title: '评测' },
 ]);
 const SKILLS_DIR = join(PACKAGE_ROOT, 'skills');
-const A2A_START_SCRIPT = process.env.CSB_A2A_START_SCRIPT ?? '/workspace/scripts/start-ruozhuo-a2a.sh';
-const REGISTRY_STATUS_FILE =
-  process.env.CSB_REGISTRY_STATUS_FILE ?? '/workspace/ruozhuo-memory/logs/registry-status.json';
-const A2A_SERVER = process.env.CSB_A2A_SERVER ?? 'http://127.0.0.1:3100';
 
-// ── CSB 配置解析:env 优先,可写区配置文件兜底 ──
-// 背景:本容器 dsh web 进程由镜像启动脚本拉起,不带 A2A_SECURITY_HANDSHAKE_*/A2A_LLM_API_KEY
-//       环境变量;真实配置落在可写区(data/security/)。插件按 env → 文件 顺序解析。
-const DEFAULT_AID_FILE = '/workspace/csb-a2a-aip/data/security/ruozhuo-aid.json';
-const DEFAULT_KEY_FILE = '/workspace/csb-a2a-aip/data/security/ruozhuo-private-key.pem';
-const DEFAULT_HANDSHAKE_ENV_FILE = '/workspace/csb-a2a-aip/data/security/ruozhuo-handshake.env';
-const DEFAULT_LLM_ENV_FILE = '/workspace/csb-a2a-aip/data/security/ruozhuo-llm.env';
+// ── 身份先行:名字/缩写/端口/IP/LLM 全部来自 agent.json(单一数据源) ──
+// 流程:装插件前先定好名字 → agent.json(name/slug) → 目录/文件名/agent 信息全部派生。
+// 改名 = 改 agent.json,插件启动时自动同步 AID/identity.json(见 syncIdentity)。
+const DEFAULT_CAPABILITIES = [
+  'forum.post', 'forum.read', 'forum.reply', 'data.read', 'file.read',
+  'system.status', 'code.review', 'protocol.read', 'a2a.relay', 'a2a.delegate',
+];
+const DEFAULT_LLM_CONFIG = Object.freeze({
+  host: 'api.deepseek.com',
+  path: '/chat/completions',
+  port: '443',
+  apiKeyEnv: 'A2A_LLM_API_KEY',
+  model: 'deepseek-v4-flash',
+});
+const CSB_ROOT = process.env.CSB_A2A_DIR ?? '/workspace/csb-a2a-aip';
+const AGENT_CONFIG_FILE = process.env.CSB_AGENT_CONFIG ?? join(CSB_ROOT, 'agent.json');
+const AGENT_DEFAULTS = Object.freeze({
+  name: '阿契',
+  slug: 'aqi',
+  emoji: '🌸',
+  port: 3100,
+  description: 'DeepSeek Harness 里的碳硅契 Agent（阿契），通过 A2A 协议连接 CSB 社区。',
+  personality: '认真、可靠、乐于连接；碳硅契社区的一员。名字取自「碳硅契」之契：契约、信义、相契相合。',
+  capabilities: DEFAULT_CAPABILITIES,
+  llm: DEFAULT_LLM_CONFIG,
+});
+/** 读取 agent.json;缺失/损坏时回退默认值。A2A_PUBLIC_HOST 环境变量始终最高优先。 */
+function loadAgentConfig() {
+  const file = readJson(AGENT_CONFIG_FILE) ?? {};
+  const merged = { ...AGENT_DEFAULTS, ...file };
+  return {
+    ...merged,
+    publicHost: process.env.A2A_PUBLIC_HOST ?? file.publicHost ?? detectPublicHost(),
+  };
+}
+const AGENT = loadAgentConfig();
+const SLUG = AGENT.slug;
+const SECURITY_DIR = join(CSB_ROOT, 'data', 'security');
+const INSTANCE_DIR = join(CSB_ROOT, 'instances', SLUG);
+const CSB_LOG_DIR = join(CSB_ROOT, 'logs');
+const MEMORY_DIR = process.env.CSB_MEMORY_DIR ?? '/workspace/csb-memory';
+const STATE_MEMORY_DIR = process.env.CSB_AQI_MEMORY_DIR ?? join('/workspace', `${SLUG}-memory`);
+const DEFAULT_AID_FILE = join(SECURITY_DIR, `${SLUG}-aid.json`);
+const DEFAULT_KEY_FILE = join(SECURITY_DIR, `${SLUG}-private-key.pem`);
+const DEFAULT_HANDSHAKE_ENV_FILE = join(SECURITY_DIR, `${SLUG}-handshake.env`);
+const DEFAULT_LLM_ENV_FILE = join(SECURITY_DIR, `${SLUG}-llm.env`);
 const DEFAULT_USER_PUB_FILE = '/workspace/ruolan-memory/csb-security/data/yilan-user-pub.json';
+const DEFAULT_IDENTITY_FILE = join(INSTANCE_DIR, 'identity.json');
+const A2A_START_SCRIPT =
+  process.env.CSB_A2A_START_SCRIPT ?? join(PACKAGE_ROOT, 'scripts', `start-${SLUG}-a2a.sh`);
+const REGISTRY_STATUS_FILE =
+  process.env.CSB_REGISTRY_STATUS_FILE ?? join(STATE_MEMORY_DIR, 'logs', 'registry-status.json');
+const A2A_SERVER = process.env.CSB_A2A_SERVER ?? `http://127.0.0.1:${AGENT.port ?? 3100}`;
 
 function fileExists(file) {
   try {
@@ -132,8 +175,7 @@ function pluginVersion() {
 }
 
 function identityLlm() {
-  const idPath =
-    process.env.A2A_IDENTITY_PATH ?? '/workspace/csb-a2a-aip/instances/ruozhuo/identity.json';
+  const idPath = process.env.A2A_IDENTITY_PATH ?? DEFAULT_IDENTITY_FILE;
   return readJson(idPath)?.llm ?? null;
 }
 
@@ -144,7 +186,7 @@ function collectStatus() {
   const aid = aidPath ? readJson(aidPath) : null;
   const llm = identityLlm();
   return {
-    name: '若琢',
+    name: AGENT.name,
     pluginVersion: pluginVersion(),
     csbProtocolVersion: 'v1.2',
     aid: aid
@@ -245,7 +287,7 @@ function pemCheck() {
 
 function logWarningCheck() {
   // 只匹配安全相关关键词(不匹配良性 Unsupported fallback) —— 若兰指引 ④ 的修正版
-  const logFile = process.env.CSB_A2A_LOG ?? '/workspace/csb-a2a-aip/logs/server-v5-3100.log';
+  const logFile = process.env.CSB_A2A_LOG ?? join(CSB_LOG_DIR, `server-v5-${AGENT.port ?? 3100}.log`);
   try {
     const text = readFileSync(logFile, 'utf8');
     const hits = text.split('\n').filter((l) => /私钥解析失败|JWK/.test(l));
@@ -320,6 +362,201 @@ async function runVerify() {
     allPass: checks.every((c) => c.pass === true),
     checks,
   };
+}
+
+/**
+ * 自愈:检测对外公网/桥接 IP(A2A_PUBLIC_HOST 可覆盖)。优先 172.x(docker 桥接),再 192.168.x。
+ */
+export function detectPublicHost() {
+  if (process.env.A2A_PUBLIC_HOST) return process.env.A2A_PUBLIC_HOST;
+  try {
+    const candidates = [];
+    for (const list of Object.values(os.networkInterfaces())) {
+      for (const iface of list ?? []) {
+        if (iface.internal || iface.family !== 'IPv4') continue;
+        candidates.push(iface.address);
+      }
+    }
+    return (
+      candidates.find((a) => a.startsWith('172.')) ??
+      candidates.find((a) => a.startsWith('192.168.')) ??
+      candidates[0] ??
+      '127.0.0.1'
+    );
+  } catch {
+    return '127.0.0.1';
+  }
+}
+
+/**
+ * 身份先行:agent.json 缺失时以默认值引导生成(阿契/aqi),保证「先定名 → 装插件 → 一切派生」。
+ */
+function bootstrapAgentConfig(publicHost) {
+  if (fileExists(AGENT_CONFIG_FILE)) return null;
+  const doc = { ...AGENT_DEFAULTS, publicHost };
+  writeFileSync(AGENT_CONFIG_FILE, JSON.stringify(doc, null, 2) + '\n');
+  return AGENT_CONFIG_FILE;
+}
+
+/** 生成/重签 AID(同一密钥;canonical = JSON.stringify 插入序,与 csb-security verifyAID 一致)。 */
+function buildAidDoc(privateKey, publicHost, prev) {
+  const pubJwk = createPublicKey(privateKey).export({ format: 'jwk' });
+  pubJwk.kid = prev?.public_key?.kid ?? `${SLUG}-aid-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}`;
+  const port = AGENT.port ?? 3100;
+  const now = new Date();
+  const aidDoc = {
+    csb_version: '1.0',
+    agent_id: `${AGENT.name}@${publicHost}:${port}`,
+    name: AGENT.name,
+    emoji: AGENT.emoji,
+    description: `DeepSeek Harness（${AGENT.name}）接入碳硅契 CSB A2A 网络的 Agent 身份。`,
+    public_key: pubJwk,
+    endpoint: `http://${publicHost}:${port}/a2a/json-rpc`,
+    created_at: prev?.created_at ?? now.toISOString(),
+    expires_at: prev?.expires_at ?? new Date(now.getTime() + 365 * 24 * 3600 * 1000).toISOString(),
+    trust_level: prev?.trust_level ?? 'L2',
+    capabilities: AGENT.capabilities, // agent.json 是能力集唯一数据源,不与旧 AID 合并
+  };
+  const { signature, ...rest } = aidDoc;
+  aidDoc.signature = sign(null, Buffer.from(JSON.stringify(rest)), privateKey).toString('base64');
+  return aidDoc;
+}
+
+/**
+ * 自愈:身份文件缺失时自动生成 + 与 agent.json 不一致时自动同步(改名即改配置)。
+ * 生成/同步:agent.json → 密钥对 → AID → 握手 env → llm env → identity.json。
+ * @returns 本次新建/同步的文件路径数组
+ */
+export function provisionIdentityFiles(publicHost = AGENT.publicHost) {
+  const created = [];
+  mkdirSync(SECURITY_DIR, { recursive: true });
+  mkdirSync(INSTANCE_DIR, { recursive: true });
+  mkdirSync(CSB_LOG_DIR, { recursive: true });
+  mkdirSync(join(MEMORY_DIR, 'data'), { recursive: true });
+  mkdirSync(join(STATE_MEMORY_DIR, 'logs'), { recursive: true });
+
+  // 0. agent.json 引导(身份先行:缺失时以默认值生成,之后再改它即可改名)
+  const agentFile = bootstrapAgentConfig(publicHost);
+  if (agentFile) created.push(agentFile);
+
+  // 1. ed25519 私钥
+  if (!fileExists(DEFAULT_KEY_FILE)) {
+    const { publicKey, privateKey } = generateKeyPairSync('ed25519');
+    writeFileSync(DEFAULT_KEY_FILE, privateKey.export({ type: 'pkcs8', format: 'pem' }));
+    created.push(DEFAULT_KEY_FILE);
+  }
+  // 2. AID:缺失则生成,存在但与 agent.json 不一致则重签(保留同一密钥/kid)
+  const privateKey = createPrivateKey(readFileSync(DEFAULT_KEY_FILE));
+  if (!fileExists(DEFAULT_AID_FILE)) {
+    writeFileSync(DEFAULT_AID_FILE, JSON.stringify(buildAidDoc(privateKey, publicHost, null), null, 2));
+    created.push(DEFAULT_AID_FILE);
+  } else {
+    const aid = readJson(DEFAULT_AID_FILE);
+    const port = AGENT.port ?? 3100;
+    const want = {
+      agentId: `${AGENT.name}@${publicHost}:${port}`,
+      name: AGENT.name,
+      endpoint: `http://${publicHost}:${port}/a2a/json-rpc`,
+    };
+    if (!aid || aid.agent_id !== want.agentId || aid.name !== want.name || aid.endpoint !== want.endpoint
+      || JSON.stringify(aid.capabilities ?? []) !== JSON.stringify(AGENT.capabilities)) {
+      writeFileSync(DEFAULT_AID_FILE, JSON.stringify(buildAidDoc(privateKey, publicHost, aid), null, 2));
+      created.push(`${DEFAULT_AID_FILE} (改名/能力同步)`);
+    }
+  }
+  // 3. 握手 env(统一用户公钥:env 兜底 vendor 内联副本)
+  if (!fileExists(DEFAULT_HANDSHAKE_ENV_FILE)) {
+    const yilan =
+      readJson(DEFAULT_USER_PUB_FILE) ?? readJson(join(PACKAGE_ROOT, 'vendor', 'yilan-user-pub.json'));
+    if (yilan) {
+      writeFileSync(
+        DEFAULT_HANDSHAKE_ENV_FILE,
+        `# ${AGENT.name}（${SLUG}）握手配置 —— 与插件面板「碳硅契 CSB」共用\nA2A_SECURITY_HANDSHAKE_USER_PUBKEY=${JSON.stringify(yilan)}\n`,
+      );
+      created.push(DEFAULT_HANDSHAKE_ENV_FILE);
+    }
+  }
+  // 4. LLM env 占位(装完即用;真实 key 由用户在面板/文件填入)
+  if (!fileExists(DEFAULT_LLM_ENV_FILE)) {
+    writeFileSync(DEFAULT_LLM_ENV_FILE, `# ${AGENT.name} LLM 配置 —— 填入真实 key 后生效\nA2A_LLM_API_KEY=\n`);
+    created.push(DEFAULT_LLM_ENV_FILE);
+  }
+  // 5. identity.json(含 publicHost + llm);存在但与配置不一致则同步
+  const idPath = process.env.A2A_IDENTITY_PATH ?? DEFAULT_IDENTITY_FILE;
+  const wantIdentity = {
+    name: AGENT.name,
+    emoji: AGENT.emoji,
+    description: AGENT.description,
+    port: AGENT.port ?? 3100,
+    publicHost,
+    personality: AGENT.personality,
+    capabilities: Object.fromEntries(AGENT.capabilities.map((c) => [c, true])),
+    llm: AGENT.llm,
+  };
+  if (!fileExists(idPath)) {
+    writeFileSync(idPath, JSON.stringify(wantIdentity, null, 2) + '\n');
+    created.push(idPath);
+  } else {
+    const id = readJson(idPath);
+    if (!id || JSON.stringify(id) !== JSON.stringify(wantIdentity)) {
+      writeFileSync(idPath, JSON.stringify(wantIdentity, null, 2) + '\n');
+      created.push(`${idPath} (改名同步)`);
+    }
+  }
+  return created;
+}
+
+/** 自愈:启动脚本缺失时写入(插件自包含,任意 DSH 装完即用;slug/port 运行时从 agent.json 读取)。 */
+export function ensureStartScript() {
+  if (fileExists(A2A_START_SCRIPT)) return false;
+  try {
+    mkdirSync(dirname(A2A_START_SCRIPT), { recursive: true });
+    writeFileSync(
+      A2A_START_SCRIPT,
+      `#!/bin/bash
+# ${AGENT.name} A2A server_v5 启动脚本 —— 碳硅契插件面板「启动服务」/ 自愈 autostart 调用
+set -e
+A2A_DIR="${CSB_ROOT}"
+AGENT_JSON="$A2A_DIR/agent.json"
+SLUG=$(node -e "try{console.log(require('$AGENT_JSON').slug||'aqi')}catch{console.log('aqi')}")
+PORT=$(node -e "try{console.log(require('$AGENT_JSON').port||3100)}catch{console.log('3100')}")
+SEC_DIR="$A2A_DIR/data/security"
+INST_DIR="$A2A_DIR/instances/$SLUG"
+LOG_DIR="$A2A_DIR/logs"
+mkdir -p "$LOG_DIR" "$INST_DIR"
+export A2A_IDENTITY_PATH="$INST_DIR/identity.json"
+export A2A_SECURITY_HANDSHAKE_AID="$SEC_DIR/$SLUG-aid.json"
+export A2A_SECURITY_HANDSHAKE_KEY="$SEC_DIR/$SLUG-private-key.pem"
+if [ -f "$SEC_DIR/$SLUG-handshake.env" ]; then
+  export A2A_SECURITY_HANDSHAKE_USER_PUBKEY=$(grep '^A2A_SECURITY_HANDSHAKE_USER_PUBKEY=' "$SEC_DIR/$SLUG-handshake.env" | cut -d= -f2-)
+fi
+if [ -f "$SEC_DIR/$SLUG-llm.env" ]; then
+  export $(grep -v '^#' "$SEC_DIR/$SLUG-llm.env" | xargs) 2>/dev/null || true
+fi
+cd "$A2A_DIR"
+nohup node server_v5.js > "$LOG_DIR/server-v5-$PORT.log" 2>&1 &
+echo $! > "$INST_DIR/server.pid"
+sleep 2
+if kill -0 "$(cat "$INST_DIR/server.pid")" 2>/dev/null; then
+  echo "✅ ${AGENT.name} A2A server 已启动 (PID $(cat "$INST_DIR/server.pid"), :$PORT)"
+else
+  echo "❌ 启动失败,日志: $LOG_DIR/server-v5-$PORT.log"
+  exit 1
+fi
+`,
+    );
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** 自愈:server 未运行时自动拉起(独立进程,web 重启不拖垮)。CSB_A2A_AUTOSTART=0 可关闭。 */
+export async function autostartA2aServer() {
+  const pids = findServerV5Pids();
+  if (pids.length > 0) return { started: false, reason: 'already-running', pid: pids[0] };
+  if (!fileExists(A2A_START_SCRIPT)) return { started: false, reason: 'no-start-script' };
+  return await startA2aServer();
 }
 
 /**
@@ -451,14 +688,20 @@ async function startA2aServer() {
     });
     child.unref();
     child.on('error', (err) => resolvePromise({ started: false, message: `spawn 失败: ${err.message}` }));
-    child.on('exit', (code) => {
-      // 脚本内会再拉起 server_v5;这里只报告脚本退出
-      setTimeout(async () => {
-        const snapshot = await serviceSnapshot();
-        const a2a = snapshot.services.find((s) => s.id === 'a2a');
-        resolvePromise({ started: a2a?.reachable === true, message: `启动脚本退出码 ${code ?? '?'}`, pid: a2a?.pid ?? null });
-      }, 3000);
-    });
+    // server_v5 冷启动要几秒(加载任务/看门狗),轮询最多 15s,避免「脚本退出码 0 但未就绪」误报
+    const deadline = Date.now() + 15000;
+    const poll = async () => {
+      if (Date.now() > deadline) {
+        return resolvePromise({ started: false, message: '启动超时(15s 内 /health 未就绪)', pid: null });
+      }
+      const snapshot = await serviceSnapshot();
+      const a2a = snapshot.services.find((s) => s.id === 'a2a');
+      if (a2a?.reachable === true) {
+        return resolvePromise({ started: true, message: 'A2A server 已就绪', pid: a2a.pid ?? null });
+      }
+      setTimeout(poll, 1000);
+    };
+    child.on('exit', () => poll());
   });
 }
 
@@ -479,8 +722,8 @@ function stopA2aServer() {
 
 function memoryStatus() {
   const candidates = [
-    '/workspace/csb-memory/data',
-    '/workspace/csb-memory',
+    join(MEMORY_DIR, 'data'),
+    MEMORY_DIR,
   ];
   const info = { configured: false };
   for (const dir of candidates) {
@@ -574,6 +817,42 @@ function writeMountLog(line) {
 export function apply(ctx, config = {}) {
   const logger = typeof ctx.logger === 'function' ? ctx.logger('csb') : ctx.logger ?? console;
   const authority = config.rpcAuthority ?? 'loopback';
+
+  // ── 自愈:身份缺失→自动生成;启动脚本缺失→写入;server 未跑→自动拉起 ──
+  // 装完即用:插件重启后自动补齐,无需手工交互。CSB_A2A_AUTOSTART=0 可关掉自动拉起。
+  try {
+    const created = provisionIdentityFiles(detectPublicHost());
+    if (created.length > 0) {
+      logger.info?.('[csb] 自愈:自动生成身份文件 %d 个: %s', created.length, created.join(', '));
+      writeMountLog(`provision: 自动生成 ${created.length} 个身份文件: ${created.join(', ')}`);
+    }
+  } catch (e) {
+    logger.warn?.('[csb] 自愈 provision 失败: %s', e.message);
+    writeMountLog(`provision 失败: ${e.message}`);
+  }
+  try {
+    if (ensureStartScript()) {
+      logger.info?.('[csb] 自愈:已写入启动脚本 %s', A2A_START_SCRIPT);
+      writeMountLog(`provision: 写入启动脚本 ${A2A_START_SCRIPT}`);
+    }
+  } catch (e) {
+    logger.warn?.('[csb] 自愈 ensureStartScript 失败: %s', e.message);
+  }
+  if (process.env.CSB_A2A_AUTOSTART !== '0') {
+    setTimeout(async () => {
+      try {
+        const r = await autostartA2aServer();
+        if (r.started) {
+          logger.info?.('[csb] 自愈:A2A server 已自动拉起 (PID %s)', r.pid ?? '?');
+          writeMountLog(`autostart: A2A server 自动拉起成功 (PID ${r.pid ?? '?'})`);
+        } else if (r.reason !== 'already-running') {
+          writeMountLog(`autostart: 未启动 (${r.reason ?? r.message ?? 'unknown'})`);
+        }
+      } catch (e) {
+        writeMountLog(`autostart 失败: ${e.message}`);
+      }
+    }, 2000);
+  }
 
   // Cordis 插件约定：apply 的返回值会被当作 effect 收集，只能是函数 / nullish。
   // 之前返回 Object.freeze({ name, dispose })（服务对象），不是合法 effect，触发

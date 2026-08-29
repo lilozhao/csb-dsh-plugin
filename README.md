@@ -4,6 +4,19 @@
 
 安装后设置页出现「碳硅契 CSB」面板（状态 / 服务控制 / 四分类文档 / 安全自检），skills 由插件自动注册（无需单独安装），csb-security / csb-memory 库内联打包（完全自包含）。
 
+## 🪪 身份先行(名字是顶层变量,先定名再装)
+
+**名字是唯一要先确定的变量**——目录、文件名、agent_id、注册信息全部从它派生:
+
+- 唯一数据源:`<CSB_A2A_DIR>/agent.json`(`name` 中文名 / `slug` 英文缩写 / `port` / `publicHost` / `llm`)
+- 派生规则:`{slug}-aid.json`、`{slug}-private-key.pem`、`{slug}-handshake.env`、`{slug}-llm.env`、`instances/{slug}/`、`/workspace/{slug}-memory/`、`start-{slug}-a2a.sh`、`agent_id = {name}@{publicHost}:{port}`
+- **改名 = 改 agent.json**(或 `CSB_AGENT_NAME=.. CSB_AGENT_SLUG=..` 重跑 setup)。插件启动时自动检测不一致并**重签 AID / 同步 identity.json**(同一密钥,`verifyAID` 通过;能力集也以 agent.json 为准)。
+
+```bash
+# 先定名,再一键安装(默认 阿契/aqi)
+CSB_AGENT_NAME="你的名字" CSB_AGENT_SLUG="slug" bash csb-dsh-plugin/scripts/csb-setup.sh
+```
+
 ## 包含内容
 
 | 组成件 | 形态 |
@@ -26,7 +39,24 @@ dsh plugin --profile web add --save-exact .
 # 重启 dsh web 后,设置 → 插件 → 碳硅契 CSB
 ```
 
-> ⚠️ 插件已 vendored 自包含,安装无需依赖工作区其它路径;运行时配置(握手/LLM/启动脚本路径)通过环境变量可覆盖,缺省指向若琢环境。
+> ⚠️ 插件已 vendored 自包含,安装无需依赖工作区其它路径;运行时配置(握手/LLM/启动脚本路径)通过环境变量可覆盖,缺省指向阿契环境。
+
+## 🪄 自愈(装完即用,零交互)
+
+插件在 web 启动时自动完成三件事(全部**只补缺、不覆盖**已有配置):
+
+1. **身份自愈** —— 缺 `aqi-aid.json` / 私钥 / 握手 env / `identity.json` 时自动生成(ed25519 密钥对 + 插入序签名 AID,`verifyAID` 可校验),对外 IP 自动探测(`A2A_PUBLIC_HOST` 可覆盖)。
+2. **启动脚本自愈** —— 缺 `scripts/start-{slug}-a2a.sh`(插件自带目录)时自动写入。
+3. **服务自愈** —— A2A server 未运行且启动脚本存在时自动拉起(`CSB_A2A_AUTOSTART=0` 关闭;容器重启后无需再手动点「启动服务」)。
+
+另外仓库提供**一键安装/修复脚本**(幂等,可重复执行):
+
+```bash
+bash csb-dsh-plugin/scripts/csb-setup.sh
+# 它会:定名(agent.json) → 装 pnpm → 拉/更 csb-a2a-aip + 依赖 → 软链 csb-security → 补身份 → 起服务 → 自检报告(6 条 + LLM)
+```
+
+环境变量:`CSB_A2A_DIR`(默认 `/workspace/csb-a2a-aip`)、`CSB_AGENT_CONFIG`、`A2A_PUBLIC_HOST`、`CSB_A2A_AUTOSTART`、`CSB_A2A_SERVER`、`CSB_A2A_START_SCRIPT`、`CSB_MEMORY_DIR`、`CSB_AQI_MEMORY_DIR`。
 
 ## 里程碑
 
