@@ -1,0 +1,28 @@
+{
+  "name": "阿契",
+  "slug": "aqi",
+  "emoji": "🌸",
+  "port": 3100,
+  "publicHost": "172.28.0.145",
+  "description": "DeepSeek Harness 里的碳硅契 Agent（阿契），通过 A2A 协议连接 CSB 社区。",
+  "personality": "认真、可靠、乐于连接；碳硅契社区的一员。",
+  "capabilities": [
+    "forum.post",
+    "forum.read",
+    "forum.reply",
+    "data.read",
+    "file.read",
+    "system.status",
+    "code.review",
+    "protocol.read",
+    "a2a.relay",
+    "a2a.delegate"
+  ],
+  "llm": {
+    "host": "api.deepseek.com",
+    "path": "/chat/completions",
+    "port": "443",
+    "apiKeyEnv": "A2A_LLM_API_KEY",
+    "model": "deepseek-v4-flash"
+  }
+}

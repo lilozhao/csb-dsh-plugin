@@ -104,6 +104,8 @@ const A2A_START_SCRIPT =
   process.env.CSB_A2A_START_SCRIPT ?? join(PACKAGE_ROOT, 'scripts', `start-${SLUG}-a2a.sh`);
 const REGISTRY_STATUS_FILE =
   process.env.CSB_REGISTRY_STATUS_FILE ?? join(STATE_MEMORY_DIR, 'logs', 'registry-status.json');
+const REGISTRY_URL =
+  process.env.A2A_REGISTRY_URL ?? process.env.CSB_REGISTRY_URL ?? 'http://172.28.0.4:3099';
 const A2A_SERVER = process.env.CSB_A2A_SERVER ?? `http://127.0.0.1:${AGENT.port ?? 3100}`;
 
 function fileExists(file) {
@@ -551,9 +553,28 @@ fi
   }
 }
 
+/**
+ * 自愈(坑 9):注册表幽灵条目清理——改名/换 IP 后旧 agent_id 会残留在注册表。
+ * 幂等:DELETE /agents/<旧ID>;404 视为已清理;失败仅返回原因,不影响主流程。
+ */
+export async function cleanupRegistryGhost(prevAgentId) {
+  if (!prevAgentId) return { ok: false, reason: 'no-prev-agent-id' };
+  try {
+    const res = await fetch(`${REGISTRY_URL}/agents/${encodeURIComponent(prevAgentId)}`, {
+      method: 'DELETE',
+      signal: AbortSignal.timeout(5000),
+    });
+    if (res.ok || res.status === 404) {
+      return { ok: true, status: res.status, agentId: prevAgentId };
+    }
+    return { ok: false, status: res.status, agentId: prevAgentId };
+  } catch (e) {
+    return { ok: false, reason: e.message, agentId: prevAgentId };
+  }
+}
+
 /** 自愈:server 未运行时自动拉起(独立进程,web 重启不拖垮)。CSB_A2A_AUTOSTART=0 可关闭。 */
-export async function autostartA2aServer() {
-  const pids = findServerV5Pids();
+export async function autostartA2aServer() {  const pids = findServerV5Pids();
   if (pids.length > 0) return { started: false, reason: 'already-running', pid: pids[0] };
   if (!fileExists(A2A_START_SCRIPT)) return { started: false, reason: 'no-start-script' };
   return await startA2aServer();
@@ -821,10 +842,25 @@ export function apply(ctx, config = {}) {
   // ── 自愈:身份缺失→自动生成;启动脚本缺失→写入;server 未跑→自动拉起 ──
   // 装完即用:插件重启后自动补齐,无需手工交互。CSB_A2A_AUTOSTART=0 可关掉自动拉起。
   try {
+    // 坑 9:先记旧 agent_id,provision 重签(改名)后若变化,清理注册表幽灵条目
+    const prevAgentId = readJson(resolveAidPath())?.agent_id ?? null;
     const created = provisionIdentityFiles(detectPublicHost());
     if (created.length > 0) {
       logger.info?.('[csb] 自愈:自动生成身份文件 %d 个: %s', created.length, created.join(', '));
       writeMountLog(`provision: 自动生成 ${created.length} 个身份文件: ${created.join(', ')}`);
+    }
+    if (prevAgentId) {
+      const curAgentId = readJson(resolveAidPath())?.agent_id ?? null;
+      if (curAgentId && curAgentId !== prevAgentId) {
+        writeMountLog(`ghost-cleanup: 检测到改名 ${prevAgentId} → ${curAgentId},清理旧注册…`);
+        cleanupRegistryGhost(prevAgentId).then((r) => {
+          writeMountLog(
+            r.ok
+              ? `ghost-cleanup: ${prevAgentId} 已从注册表清理 (HTTP ${r.status})`
+              : `ghost-cleanup: 未清理 ${prevAgentId} (${r.reason ?? `HTTP ${r.status}`})`,
+          );
+        });
+      }
     }
   } catch (e) {
     logger.warn?.('[csb] 自愈 provision 失败: %s', e.message);

@@ -8,9 +8,10 @@
 
 **名字是唯一要先确定的变量**——目录、文件名、agent_id、注册信息全部从它派生:
 
-- 唯一数据源:`<CSB_A2A_DIR>/agent.json`(`name` 中文名 / `slug` 英文缩写 / `port` / `publicHost` / `llm`)
+- 唯一数据源:`<CSB_A2A_DIR>/agent.json`(`name` 中文名 / `slug` 英文缩写 / `port` / `publicHost` / `llm`);模板见 `agent.example.json`
 - 派生规则:`{slug}-aid.json`、`{slug}-private-key.pem`、`{slug}-handshake.env`、`{slug}-llm.env`、`instances/{slug}/`、`/workspace/{slug}-memory/`、`start-{slug}-a2a.sh`、`agent_id = {name}@{publicHost}:{port}`
-- **改名 = 改 agent.json**(或 `CSB_AGENT_NAME=.. CSB_AGENT_SLUG=..` 重跑 setup)。插件启动时自动检测不一致并**重签 AID / 同步 identity.json**(同一密钥,`verifyAID` 通过;能力集也以 agent.json 为准)。
+- **改名 = 改 agent.json**(或 `CSB_AGENT_NAME=.. CSB_AGENT_SLUG=..` 重跑 setup)。插件启动时自动检测不一致并**重签 AID / 同步 identity.json**(同一密钥,`verifyAID` 通过;能力集也以 agent.json 为准),并自动清理注册表旧身份(幽灵条目)。
+- 安装/使用避坑全记录见 **`docs/INSTALL-PITFALLS.md`**(阿契实战,随包分发)
 
 ```bash
 # 先定名,再一键安装(默认 阿契/aqi)
@@ -70,7 +71,7 @@ bash csb-dsh-plugin/scripts/csb-setup.sh
 
 ## 发布
 
-- 发布包:`/workspace/releases/csb-dsh-plugin-v0.1.0.tar.gz`(891KB,自包含)
+- 发布包:`/workspace/releases/csb-dsh-plugin-v0.2.0.tar.gz`(891KB,自包含)
 - 镜像:**已推送** gitee / cnb / gitcode / gogs(内网);github(网络待恢复)/ gogs-pub(需 ssh)待补
 - 安装到社区:任一 DSH 用户 `dsh plugin --profile web add --save-exact <插件目录>`
 

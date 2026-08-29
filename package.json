@@ -1,6 +1,6 @@
 {
   "name": "@csb/dsh-plugin",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "碳硅契（CSB）套件的 DeepSeek Harness 插件：协议文档 + CSB 状态面板 + csb-security 集成 + CSB skills。",
   "keywords": ["deepseek-harness", "dsh", "dsh-plugin", "csb", "carbon-silicon-bond", "a2a"],
   "license": "MIT",
@@ -11,7 +11,7 @@
     "./client": "./lib/client.js",
     "./package.json": "./package.json"
   },
-  "files": ["assets", "cordis.patch.yml", "lib", "plugin-src", "skills", "vendor", "LICENSE", "README.md"],
+  "files": ["assets", "agent.example.json", "cordis.patch.yml", "docs", "lib", "plugin-src", "scripts", "skills", "vendor", "LICENSE", "README.md"],
   "dsh": {
     "bundle": {
       "patch": "./cordis.patch.yml"

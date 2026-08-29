@@ -58,6 +58,11 @@ else
   echo "✅ pnpm $(pnpm --version)"
 fi
 
+# ── 1.5. esbuild 构建脚本修复(坑 13:pnpm 默认忽略 build scripts → npm run build 报 ERR_PNPM_IGNORED_BUILDS) ──
+if [ -d "$PLUGIN_DIR/node_modules" ]; then
+  (cd "$PLUGIN_DIR" && pnpm rebuild esbuild >/dev/null 2>&1) && echo "✅ esbuild 构建脚本已修复" || echo "ℹ️ esbuild 修复跳过(直接用 lib/ 产物不受影响)"
+fi
+
 # ── 2. csb-a2a-aip 仓库 + 依赖 ──
 if [ ! -f "$A2A_DIR/server_v5.js" ]; then
   if [ -d "$A2A_DIR/.git" ]; then
