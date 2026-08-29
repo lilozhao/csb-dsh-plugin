@@ -24,12 +24,8 @@ else
   echo "⚙️  配置文件已存在，跳过"
 fi
 
-# 检查 identity.json
-if [ ! -f "identity.json" ]; then
-  echo "⚠️  警告: 未找到 identity.json"
-  echo "   请创建 identity.json，格式如下:"
-  echo '   {"name": "Agent名", "emoji": "🌸", "description": "描述"}'
-fi
+# 身份来源说明(身份先行:从 agent.json 派生,无需单独 identity.json)
+echo "ℹ️  身份来自 agent.json(可设 CSB_A2A_DIR)或本地 identity.json"
 
 # 添加执行权限
 chmod +x csb-community-client.js

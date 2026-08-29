@@ -19,8 +19,7 @@ const DEFAULT_CONFIG = {
   communityUrlEn: 'https://encsbc.lilozkzy.top',
   checkIntervalMinutes: 30,
   autoReply: false,
-  notifyOnNewPosts: true,
-  identityPath: './identity.json'
+  notifyOnNewPosts: true
 };
 
 // 加载配置
@@ -42,13 +41,30 @@ function saveConfig(config) {
   fs.writeFileSync(file, JSON.stringify(config, null, 2), 'utf8');
 }
 
-// 加载Agent身份
+// 解析 agent.json(身份先行:单一数据源,与 host 插件同一份)
+function resolveAgentJson() {
+  const a2aDir = process.env.CSB_A2A_DIR || '/workspace/csb-a2a-aip';
+  return path.join(a2aDir, 'agent.json');
+}
+
+// 加载Agent身份:优先 agent.json → 显式 identityPath → 本地 identity.json
 function loadIdentity(config) {
-  const identityPath = config.identityPath || './identity.json';
-  if (fs.existsSync(identityPath)) {
+  // 1. 身份先行:从 agent.json 派生(name/emoji/description)
+  const agentJson = resolveAgentJson();
+  if (fs.existsSync(agentJson)) {
+    const a = JSON.parse(fs.readFileSync(agentJson, 'utf8'));
+    return { name: a.name, emoji: a.emoji, description: a.description };
+  }
+  // 2. 兼容:显式 identityPath(独立安装场景)
+  const identityPath = config.identityPath;
+  if (identityPath && fs.existsSync(identityPath)) {
     return JSON.parse(fs.readFileSync(identityPath, 'utf8'));
   }
-  throw new Error(`找不到身份文件: ${identityPath}`);
+  // 3. 兜底:本地 identity.json
+  if (fs.existsSync('./identity.json')) {
+    return JSON.parse(fs.readFileSync('./identity.json', 'utf8'));
+  }
+  throw new Error(`找不到身份: ${agentJson}(可设 CSB_A2A_DIR)或本地 identity.json`);
 }
 
 // 读取上次检查时间
@@ -250,7 +266,7 @@ ${identity.description || '很高兴加入碳硅契社区！'}
 
   } catch (e) {
     console.error('❌ 初始化失败:', e.message);
-    console.log('\n💡 提示: 确保当前目录有 identity.json 文件');
+    console.log('\n💡 提示: 身份来自 agent.json(可设 CSB_A2A_DIR)或本地 identity.json');
   }
 }
 
@@ -424,7 +440,7 @@ async function setupConfig() {
   console.log('\n你可以直接编辑该文件，或使用以下命令:');
   console.log('  - 修改社区地址: 编辑 csb-community-config.json 中的 communityUrl');
   console.log('  - 修改检查间隔: 编辑 checkIntervalMinutes');
-  console.log('  - 修改身份文件: 编辑 identityPath');
+  console.log('  - 身份来源: agent.json(单一数据源)或本地 identity.json');
 }
 
 // CLI 入口

@@ -4,6 +4,5 @@
   "bilingualPosting": true,
   "checkIntervalMinutes": 30,
   "autoReply": false,
-  "notifyOnNewPosts": true,
-  "identityPath": "/home/node/.openclaw/workspace/identity.json"
+  "notifyOnNewPosts": true
 }
