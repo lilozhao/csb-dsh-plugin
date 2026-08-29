@@ -64,20 +64,35 @@ if [ -d "$PLUGIN_DIR/node_modules" ]; then
 fi
 
 # ── 2. csb-a2a-aip 仓库 + 依赖 ──
+# 坑(2026-08-29):目录非空时 git clone 会拒绝,旧脚本又吞掉错误 → server_v5.js 静默缺失。
+# 修复:空目录直接克隆;git 仓走 pull;非空非 git 仓(如已生成 agent.json 身份)→ 克隆到临时目录再合并(不覆盖身份文件)。
 if [ ! -f "$A2A_DIR/server_v5.js" ]; then
   if [ -d "$A2A_DIR/.git" ]; then
     echo "🔄 更新 csb-a2a-aip ..."
-    (cd "$A2A_DIR" && git pull --ff-only >/dev/null 2>&1) || true
+    (cd "$A2A_DIR" && git pull --ff-only >/dev/null 2>&1) || echo "⚠️ git pull 失败(稍后可重试)"
+  elif [ -z "$(ls -A "$A2A_DIR" 2>/dev/null)" ]; then
+    echo "📦 克隆 csb-a2a-aip 到空目录 ..."
+    git clone --depth 1 https://gitee.com/lilozhao/csb-a2a-aip.git "$A2A_DIR" >/dev/null 2>&1 \
+      && echo "✅ csb-a2a-aip 克隆完成" \
+      || echo "⚠️ 克隆失败——请检查网络后重跑本脚本"
   else
-    echo "📦 克隆 csb-a2a-aip ..."
-    git clone --depth 1 https://gitee.com/lilozhao/csb-a2a-aip.git "$A2A_DIR" >/dev/null 2>&1
+    echo "📦 csb-a2a-aip 目录非空且非 git 仓——克隆到临时目录再合并(保留 agent.json 等身份文件) ..."
+    TMP_CLONE="$(mktemp -d)"
+    if git clone --depth 1 https://gitee.com/lilozhao/csb-a2a-aip.git "$TMP_CLONE" >/dev/null 2>&1; then
+      # 只补充缺失文件,绝不覆盖已存在的身份文件(agent.json / data/security / instances / data)
+      cp -rn "$TMP_CLONE/." "$A2A_DIR/" && echo "✅ 代码已合并(现有身份文件已保留)"
+      rm -rf "$TMP_CLONE"
+    else
+      echo "⚠️ 克隆失败——请检查网络后重跑本脚本"
+      rm -rf "$TMP_CLONE"
+    fi
   fi
 fi
 if [ ! -d "$A2A_DIR/node_modules" ]; then
   echo "📦 安装 csb-a2a-aip 依赖 (express/node-fetch) ..."
   (cd "$A2A_DIR" && npm install --no-audit --no-fund >/dev/null 2>&1)
 fi
-[ -f "$A2A_DIR/server_v5.js" ] && echo "✅ A2A server_v5 就位" || echo "⚠️ server_v5.js 缺失"
+[ -f "$A2A_DIR/server_v5.js" ] && echo "✅ A2A server_v5 就位" || echo "⚠️ server_v5.js 缺失(见上方克隆步骤输出)"
 
 # ── 3. csb-security 权威实现软链 ──
 if [ ! -e /workspace/csb-security/lib ]; then
