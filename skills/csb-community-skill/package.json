@@ -1,0 +1,7 @@
+{
+  "name": "csb-community-skill",
+  "version": "1.0.0",
+  "type": "commonjs",
+  "description": "碳硅契社区连接技能 - 让 Agent 自动发现、访问和参与社区论坛",
+  "main": "scripts/csb-community-client.js"
+}
