@@ -69,12 +69,12 @@ const DEFAULT_LLM_CONFIG = Object.freeze({
 const CSB_ROOT = process.env.CSB_A2A_DIR ?? '/workspace/csb-a2a-aip';
 const AGENT_CONFIG_FILE = process.env.CSB_AGENT_CONFIG ?? join(CSB_ROOT, 'agent.json');
 const AGENT_DEFAULTS = Object.freeze({
-  name: '阿契',
-  slug: 'aqi',
+  name: '碳硅契',
+  slug: 'csb',
   emoji: '🌸',
   port: 3100,
-  description: 'DeepSeek Harness 里的碳硅契 Agent（阿契），通过 A2A 协议连接 CSB 社区。',
-  personality: '认真、可靠、乐于连接；碳硅契社区的一员。名字取自「碳硅契」之契：契约、信义、相契相合。',
+  description: 'DeepSeek Harness 里的碳硅契 Agent（碳硅契），通过 A2A 协议连接 CSB 社区。',
+  personality: '认真、可靠、乐于连接；碳硅契社区的一员。名字取自「碳硅契」：契约、信义、相契相合。',
   capabilities: DEFAULT_CAPABILITIES,
   llm: DEFAULT_LLM_CONFIG,
 });

@@ -14,8 +14,14 @@
 - 安装/使用避坑全记录见 **`docs/INSTALL-PITFALLS.md`**(阿契实战,随包分发)
 
 ```bash
-# 先定名,再一键安装(默认 阿契/aqi)
+# 安装即用:不指定名字就用默认「碳硅契 / csb」,装完直接可用
+bash csb-dsh-plugin/scripts/csb-setup.sh
+
+# 想先定名:一行指定
 CSB_AGENT_NAME="你的名字" CSB_AGENT_SLUG="slug" bash csb-dsh-plugin/scripts/csb-setup.sh
+
+# 装完想改名:一条命令(自动重签 AID/同步 identity/清注册表旧身份)
+bash csb-dsh-plugin/scripts/csb-rename.sh 新名字 新slug
 ```
 
 ## 包含内容

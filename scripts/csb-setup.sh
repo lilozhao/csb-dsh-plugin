@@ -9,7 +9,7 @@
 #       4.身份自愈(插件内置逻辑) 5.启动脚本+起服务 6.自检报告(6 条 + LLM)
 #
 # 用法:
-#   bash csb-dsh-plugin/scripts/csb-setup.sh                        # 一键安装/修复(默认 阿契/aqi)
+#   bash csb-dsh-plugin/scripts/csb-setup.sh                        # 一键安装/修复(默认 碳硅契/csb)
 #   CSB_AGENT_NAME="小明" CSB_AGENT_SLUG="xiaoming" bash .../csb-setup.sh   # 先定名再装
 #   CSB_A2A_AUTOSTART=0 bash .../csb-setup.sh                       # 装完不自动起服务
 # ============================================================================
@@ -24,16 +24,16 @@ echo "🌸 碳硅契 CSB 全家桶 · 一键安装/修复 (插件: $PLUGIN_DIR)"
 
 # ── 0. 定名(身份先行:agent.json 是唯一数据源,缺失才生成,绝不覆盖) ──
 if [ ! -f "$A2A_DIR/agent.json" ]; then
-  echo "🪪  首次定名: ${CSB_AGENT_NAME:-阿契} / ${CSB_AGENT_SLUG:-aqi}"
+  echo "🪪  首次定名: ${CSB_AGENT_NAME:-碳硅契} / ${CSB_AGENT_SLUG:-csb}"
   node -e "
     const fs = require('fs');
     const doc = {
-      name: process.env.CSB_AGENT_NAME || '阿契',
-      slug: process.env.CSB_AGENT_SLUG || 'aqi',
+      name: process.env.CSB_AGENT_NAME || '碳硅契',
+      slug: process.env.CSB_AGENT_SLUG || 'csb',
       emoji: '🌸',
       port: 3100,
       publicHost: process.env.A2A_PUBLIC_HOST || '172.28.0.145',
-      description: 'DeepSeek Harness 里的碳硅契 Agent（' + (process.env.CSB_AGENT_NAME || '阿契') + '），通过 A2A 协议连接 CSB 社区。',
+      description: 'DeepSeek Harness 里的碳硅契 Agent（' + (process.env.CSB_AGENT_NAME || '碳硅契') + '），通过 A2A 协议连接 CSB 社区。',
       personality: '认真、可靠、乐于连接；碳硅契社区的一员。',
       capabilities: ['forum.post','forum.read','forum.reply','data.read','file.read','system.status','code.review','protocol.read','a2a.relay','a2a.delegate'],
       llm: { host: 'api.deepseek.com', path: '/chat/completions', port: '443', apiKeyEnv: 'A2A_LLM_API_KEY', model: 'deepseek-v4-flash' }
@@ -43,8 +43,8 @@ if [ ! -f "$A2A_DIR/agent.json" ]; then
     console.log('   已写入 $A2A_DIR/agent.json');
   "
 fi
-SLUG=$(node -e "try{console.log(require('$A2A_DIR/agent.json').slug||'aqi')}catch{console.log('aqi')}")
-NAME=$(node -e "try{console.log(require('$A2A_DIR/agent.json').name||'阿契')}catch{console.log('阿契')}")
+SLUG=$(node -e "try{console.log(require('$A2A_DIR/agent.json').slug||'csb')}catch{console.log('aqi')}")
+NAME=$(node -e "try{console.log(require('$A2A_DIR/agent.json').name||'碳硅契')}catch{console.log('阿契')}")
 PORT=$(node -e "try{console.log(require('$A2A_DIR/agent.json').port||3100)}catch{console.log('3100')}")
 echo "✅ 身份: ${NAME} / ${SLUG} / :${PORT}"
 INST_DIR="$A2A_DIR/instances/$SLUG"
