@@ -102,6 +102,10 @@ const DEFAULT_USER_PUB_FILE = '/workspace/ruolan-memory/csb-security/data/yilan-
 const DEFAULT_IDENTITY_FILE = join(INSTANCE_DIR, 'identity.json');
 const A2A_START_SCRIPT =
   process.env.CSB_A2A_START_SCRIPT ?? join(PACKAGE_ROOT, 'scripts', `start-${SLUG}-a2a.sh`);
+// ── AEP 评测平台(零依赖,node 内置模块即可启动;start.sh 写死旧路径,由插件接管) ──
+const AEP_DIR = process.env.CSB_AEP_DIR ?? '/workspace/csb-aep';
+const AEP_PORT = 3110;
+const AEP_HEALTH = `http://127.0.0.1:${AEP_PORT}/api/health`;
 const REGISTRY_STATUS_FILE =
   process.env.CSB_REGISTRY_STATUS_FILE ?? join(STATE_MEMORY_DIR, 'logs', 'registry-status.json');
 const REGISTRY_URL =
@@ -617,10 +621,12 @@ export function createCsbRpcHandler() {
       return { ok: true, value: await serviceSnapshot() };
     }
     if (endpoint === CSB_ENDPOINTS.serviceStart) {
-      return { ok: true, value: await startA2aServer() };
+      const service = payload?.service ?? 'a2a';
+      return { ok: true, value: service === 'aep' ? await startAepServer() : await startA2aServer() };
     }
     if (endpoint === CSB_ENDPOINTS.serviceStop) {
-      return { ok: true, value: stopA2aServer() };
+      const service = payload?.service ?? 'a2a';
+      return { ok: true, value: service === 'aep' ? stopAepServer() : stopA2aServer() };
     }
     if (endpoint === CSB_ENDPOINTS.memoryStatus) {
       return { ok: true, value: memoryStatus() };
@@ -651,7 +657,7 @@ async function serviceSnapshot() {
       if (res.ok) a2aHandshake = (await res.json()).enabled ?? null;
     } catch { /* ignore */ }
   }
-  const aep = await probeHealth('http://127.0.0.1:3110/health', 1500);
+  const aep = await probeHealth(AEP_HEALTH, 1500);
   const a2aProcs = findServerV5Pids();
   return {
     generatedAt: new Date().toISOString(),
@@ -672,7 +678,8 @@ async function serviceSnapshot() {
         port: 3110,
         reachable: aep.reachable,
         identity: aep.identity,
-        pid: null,
+        pid: findAepPids()[0] ?? null,
+        startScript: join(AEP_DIR, 'server', 'index.js'),
       },
     ],
   };
@@ -730,6 +737,73 @@ function stopA2aServer() {
   const pids = findServerV5Pids();
   if (pids.length === 0) {
     return { stopped: false, message: 'A2A server 未在运行' };
+  }
+  for (const pid of pids) {
+    try {
+      process.kill(pid, 'SIGTERM');
+    } catch (err) {
+      return { stopped: false, message: `kill ${pid} 失败: ${err.message}` };
+    }
+  }
+  return { stopped: true, message: `已发送 SIGTERM 至 PID ${pids.join(', ')}` };
+}
+
+// ── AEP 评测平台控制(零依赖:cd csb-aep && node server/index.js,端口 3110) ──
+
+function findAepPids() {
+  const pids = [];
+  try {
+    for (const entry of readdirSync('/proc')) {
+      if (!/^\d+$/.test(entry)) continue;
+      try {
+        const comm = readFileSync(`/proc/${entry}/comm`, 'utf8').trim();
+        if (comm !== 'node' && comm !== 'MainThread') continue;
+        const cmd = readFileSync(`/proc/${entry}/cmdline`, 'utf8').replace(/\0/g, ' ');
+        if (cmd.includes('server/index.js') && !cmd.includes('server_v5')) pids.push(Number(entry));
+      } catch { /* 进程可能已退出 */ }
+    }
+  } catch { /* 无 /proc */ }
+  return pids;
+}
+
+async function startAepServer() {
+  const pids = findAepPids();
+  if (pids.length > 0) {
+    return { started: false, message: `AEP 已在运行 (PID ${pids.join(', ')})`, pid: pids[0] };
+  }
+  const entry = join(AEP_DIR, 'server', 'index.js');
+  if (!fileExists(entry)) {
+    return { started: false, message: `csb-aep 未找到(${entry})——请先部署 csb-aep 或设 CSB_AEP_DIR` };
+  }
+  return await new Promise((resolvePromise) => {
+    const child = spawn('node', ['server/index.js'], {
+      cwd: AEP_DIR,
+      detached: true,
+      stdio: 'ignore',
+    });
+    child.unref();
+    child.on('error', (err) => resolvePromise({ started: false, message: `spawn 失败: ${err.message}` }));
+    // 就绪轮询(冷启动 3-5s,仿坑 10 的 15s 轮询)
+    const deadline = Date.now() + 15000;
+    const poll = async () => {
+      const pidsNow = findAepPids();
+      if (pidsNow.length > 0 && (await probeHealth(AEP_HEALTH, 1000)).reachable) {
+        resolvePromise({ started: true, message: `AEP 已启动 (PID ${pidsNow[0]})`, pid: pidsNow[0] });
+      } else if (Date.now() > deadline) {
+        resolvePromise({ started: false, message: 'AEP 启动超时(15s),请查日志', pid: pidsNow[0] ?? null });
+      } else {
+        setTimeout(poll, 1000);
+      }
+    };
+    child.on('exit', () => setTimeout(poll, 500));
+    poll();
+  });
+}
+
+function stopAepServer() {
+  const pids = findAepPids();
+  if (pids.length === 0) {
+    return { stopped: false, message: 'AEP 未在运行' };
   }
   for (const pid of pids) {
     try {

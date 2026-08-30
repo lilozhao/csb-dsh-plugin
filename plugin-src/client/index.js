@@ -91,19 +91,19 @@ function ServicesPanel({ services, busy, onStart, onStop }) {
     h('div', { style: styles.title }, '服务(独立进程)'),
     !services ? h('div', null, '加载中…')
       : services.map((s) =>
-          h('div', { key: s.id, style: styles.row },
-            h('span', { style: styles.label }, `${s.name} (:${s.port})`),
+          h('div', { key: s.id, style: { ...styles.row, gap: 8 } },
+            h('span', { style: styles.label, flex: 1 }, `${s.name} (:${s.port})`),
             h('span', null,
               h(Badge, { ok: s.reachable, text: s.reachable ? (s.identity ?? '在线') : '离线' }),
               s.handshakeEnabled !== null ? h('span', { style: styles.muted }, ` 握手:${s.handshakeEnabled ? '✅' : '❌'}`) : null,
               s.pid ? h('span', { style: styles.muted }, ` PID:${s.pid}`) : null,
             ),
+            h('span', { style: { display: 'flex', gap: 6 } },
+              h('button', { style: styles.btn, onClick: () => onStart(s.id), disabled: busy }, '启动'),
+              h('button', { style: styles.btnDanger, onClick: () => onStop(s.id), disabled: busy }, '停止'),
+            ),
           ),
         ),
-    h('div', { style: { marginTop: 8, display: 'flex', gap: 8 } },
-      h('button', { style: styles.btn, onClick: onStart, disabled: busy }, '启动 A2A'),
-      h('button', { style: styles.btnDanger, onClick: onStop, disabled: busy }, '停止 A2A'),
-    ),
   );
 }
 
@@ -238,10 +238,10 @@ function CsbPanel({ rpcCall }) {
     }
   };
 
-  const startA2a = async () => {
+  const startService = async (serviceId) => {
     setBusy(true);
     try {
-      const r = await rpcCall(ENDPOINTS.serviceStart, {}).then(unwrap);
+      const r = await rpcCall(ENDPOINTS.serviceStart, { service: serviceId }).then(unwrap);
       setError(r.started ? null : `启动提示: ${r.message}`);
       await refreshServices();
     } catch (e) {
@@ -251,10 +251,10 @@ function CsbPanel({ rpcCall }) {
     }
   };
 
-  const stopA2a = async () => {
+  const stopService = async (serviceId) => {
     setBusy(true);
     try {
-      const r = await rpcCall(ENDPOINTS.serviceStop, {}).then(unwrap);
+      const r = await rpcCall(ENDPOINTS.serviceStop, { service: serviceId }).then(unwrap);
       setError(r.stopped ? null : `停止提示: ${r.message}`);
       await refreshServices();
     } catch (e) {
@@ -267,7 +267,7 @@ function CsbPanel({ rpcCall }) {
   return h('div', { style: { padding: '4px 0' } },
     error ? h('div', { style: styles.error }, `碳硅契提示: ${error}`) : null,
     h('div', { style: styles.section }, h(StatusCard, { status, memory })),
-    h('div', { style: styles.section }, h(ServicesPanel, { services, busy, onStart: startA2a, onStop: stopA2a })),
+    h('div', { style: styles.section }, h(ServicesPanel, { services, busy, onStart: startService, onStop: stopService })),
     h('div', { style: styles.section }, h(DocsPanel, { sections, activeSection, openFile, content, loading, onSelectSection: setActiveSection, onOpen: openDoc })),
     h('div', { style: styles.section }, h(VerifyPanel, { verify, busy, onRun: runVerify })),
   );

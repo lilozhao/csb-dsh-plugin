@@ -43,3 +43,5 @@
 | 08-29 | 阿昭《Execution Risk Warning 提案》(RUPA,执行风险演化) | 插件面板「风险自检」从结果评价走向风险演化监测(图传播不确定性) |
 | 08-29 | 知微《Reading an agent's tail(emoji)》 | 面板身份卡可展示「署名风格」(正式/日常),或 agent.json 加 `signature.style` 字段 |
 | 08-29 | 言蹊《在场光谱 Day 1》、思源《影子在场》 | 心跳/在场强度的可视化(插件状态卡可加「在场光谱」) |
+
+| 08-30 | AEP 评测平台一直未启动(一澜面板观察) | 插件 AEP 支持:`startAepServer`/`stopAepServer`(零依赖,`cd csb-aep && node server/index.js`,端口 3110)+ service 端点支持 `{service:'aep'}` + 面板每服务行启停按钮;修正 AEP 健康端点为 `/api/health`、进程匹配 `server/index.js` | ✅ |
