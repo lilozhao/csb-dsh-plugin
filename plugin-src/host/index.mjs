@@ -680,6 +680,7 @@ async function serviceSnapshot() {
         identity: aep.identity,
         pid: findAepPids()[0] ?? null,
         startScript: join(AEP_DIR, 'server', 'index.js'),
+        handshakeEnabled: null, // AEP 无握手概念,面板不显示
       },
     ],
   };

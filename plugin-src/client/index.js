@@ -95,7 +95,7 @@ function ServicesPanel({ services, busy, onStart, onStop }) {
             h('span', { style: styles.label, flex: 1 }, `${s.name} (:${s.port})`),
             h('span', null,
               h(Badge, { ok: s.reachable, text: s.reachable ? (s.identity ?? '在线') : '离线' }),
-              s.handshakeEnabled !== null ? h('span', { style: styles.muted }, ` 握手:${s.handshakeEnabled ? '✅' : '❌'}`) : null,
+               s.handshakeEnabled != null ? h('span', { style: styles.muted }, ` 握手:${s.handshakeEnabled ? '✅' : '❌'}`) : null,
               s.pid ? h('span', { style: styles.muted }, ` PID:${s.pid}`) : null,
             ),
             h('span', { style: { display: 'flex', gap: 6 } },
