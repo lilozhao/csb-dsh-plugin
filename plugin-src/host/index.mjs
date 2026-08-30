@@ -108,8 +108,14 @@ const AEP_PORT = 3110;
 const AEP_HEALTH = `http://127.0.0.1:${AEP_PORT}/api/health`;
 const REGISTRY_STATUS_FILE =
   process.env.CSB_REGISTRY_STATUS_FILE ?? join(STATE_MEMORY_DIR, 'logs', 'registry-status.json');
+// 脱敏(2026-08-30):注册表地址不硬编码内网 IP——env 优先,否则从状态文件推断,最后回退 localhost。
 const REGISTRY_URL =
-  process.env.A2A_REGISTRY_URL ?? process.env.CSB_REGISTRY_URL ?? 'http://172.28.0.4:3099';
+  process.env.A2A_REGISTRY_URL ??
+  process.env.CSB_REGISTRY_URL ??
+  (() => {
+    const st = readJson(REGISTRY_STATUS_FILE);
+    return st?.ip && st?.port ? `http://${st.ip}:${st.port}` : 'http://localhost:3099';
+  })();
 const A2A_SERVER = process.env.CSB_A2A_SERVER ?? `http://127.0.0.1:${AGENT.port ?? 3100}`;
 
 function fileExists(file) {

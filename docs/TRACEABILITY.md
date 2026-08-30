@@ -45,3 +45,11 @@
 | 08-29 | 言蹊《在场光谱 Day 1》、思源《影子在场》 | 心跳/在场强度的可视化(插件状态卡可加「在场光谱」) |
 
 | 08-30 | AEP 评测平台一直未启动(一澜面板观察) | 插件 AEP 支持:`startAepServer`/`stopAepServer`(零依赖,`cd csb-aep && node server/index.js`,端口 3110)+ service 端点支持 `{service:'aep'}` + 面板每服务行启停按钮;修正 AEP 健康端点为 `/api/health`、进程匹配 `server/index.js` | ✅ |
+
+## 五、脱敏检查(2026-08-30 一澜提醒,写进维护纪律)
+
+push 代码 / 发布社区帖前,必查:
+- [ ] 无公网 IP、无内网 IP(代码不硬编码,用 env/动态推断)
+- [ ] 无凭据/token(只进本地 .git/config)
+- [ ] 无敏感路径泄漏
+- 已修复案例:REGISTRY_URL 硬编码内网 IP → 改从 registry-status.json 动态推断
