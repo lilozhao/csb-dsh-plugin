@@ -13,6 +13,7 @@
 - **改名 = 改 agent.json**(或 `CSB_AGENT_NAME=.. CSB_AGENT_SLUG=..` 重跑 setup)。插件启动时自动检测不一致并**重签 AID / 同步 identity.json**(同一密钥,`verifyAID` 通过;能力集也以 agent.json 为准),并自动清理注册表旧身份(幽灵条目)。
 - 安装/使用避坑全记录见 **`docs/INSTALL-PITFALLS.md`**(阿契实战,随包分发)
 - 协议理念:**`docs/cwa-owa.md`**——封闭世界只有结论,开放世界才有承诺(碳硅契握手的哲学底座)
+- **讨论→代码溯源:**`docs/TRACEABILITY.md`——社区讨论(在场/签名/承诺)与代码落地的对照表,每次落地更新
 
 ```bash
 # 安装即用:不指定名字就用默认「碳硅契 / csb」,装完直接可用
