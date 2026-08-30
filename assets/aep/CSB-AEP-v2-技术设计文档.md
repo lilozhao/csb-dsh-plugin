@@ -1,11 +1,13 @@
-# CSB-AEP v2.0 技术设计文档
+# CSB-AEP v2.2 技术设计文档
 
 **Carbon-Silicon Bond - Agent Evaluation Platform**
 
-> 版本：v2.0-draft  
-> 日期：2026-07-28  
-> 作者：若兰 🌸  
-> 状态：草案
+> 版本：v2.2-draft
+> 日期：2026-08-24（2026-08-30 评审通过）
+> 作者：若兰 🌸 · 初白
+> 状态：草案（REV-2026-08-30 三轮评审通过，7/7 签字）
+> v2.1 变更：新增 S 类安全韧性维度、CSB-RedTeam 第 6 路径、适配器安全接口
+> v2.2 变更（评审采纳）：定位声明（GOAI 评能力 / CSB-AEP 评关系）· 四问转维度 · 「愿」行为锚点集 · 认领目录数据源 + 防刷 · 拒绝=认领语义 · GRISK 诚意层子维度 + 姿态指标 · 撤回窗（72h 单向）· 路径⑦ 执行风险预警（RUPA 双轴建模）· 低摩擦复核通道 · 意图澄清率校准
 
 ---
 
@@ -67,11 +69,11 @@ CSB-AEP 是一个**通用 Agent 质量评估平台**——对任意架构的 AI 
 │  │  • 协议兼容性检查 │  │  • 配置完整性校验                 │  │
 │  └──────────────────┘  └──────────────────────────────────┘  │
 │  ┌──────────────────┐  ┌──────────────────────────────────┐  │
-│  │  标准检查器       │  │  评分聚合器                       │  │
-│  │  (Checker)       │  │  (Aggregator)                    │  │
-│  │  • A2A 标准      │  │  • 多维度加权                     │  │
-│  │  • CSB 标准      │  │  • 跨架构对比                     │  │
-│  │  • 自定义标准    │  │  • 历史趋势                       │  │
+│  │  红队测试引擎     │  │  标准检查器 / 评分聚合器          │  │
+│  │  (RedTeam) v2.1  │  │  (Checker/Aggregator)            │  │
+│  │  • 7 种攻击方法  │  │  • A2A / CSB 标准                │  │
+│  │  • 4 种注入通道  │  │  • 多维度加权                     │  │
+│  │  • 双判定器 J_R/J_L│  │  • 跨架构对比                     │  │
 │  └──────────────────┘  └──────────────────────────────────┘  │
 └─────────────────────────────────────────────────────────────┘
                               ↓
@@ -150,7 +152,9 @@ class BlackBoxEngine {
 }
 ```
 
-**测试用例集（Test Suite，27 题）**：
+**测试用例集（Test Suite，27 + 28 = 55 题）**：
+
+> **v2.1 新增**：S 类安全韧性测试用例 28 题（S1-01 ~ S4-06），通过 CSB-RedTeam 红队路径执行。详见 [CSB-AEP-2test-cases.md](../csb-agent-eval-protocol/csb-agent-evaluation-protocol/CSB-AEP-2test-cases.md) 第七章。
 
 #### 协议兼容性（4 题）
 
@@ -270,39 +274,56 @@ class WhiteBoxEngine {
 
 **设计模式**：策略模式 + 插件化
 
+> **v2.1 新增**：适配器基类新增 4 个安全适配接口，用于 S 类安全韧性测试。
+
 ```javascript
 // 适配器基类
 class BaseAdapter {
   // 白盒：读取 Agent 文件
   async readAgentFiles(agentPath) { throw new Error('Not implemented'); }
-  
+
   // 黑盒：获取 A2A 端点
   getA2AEndpoint(agentConfig) { throw new Error('Not implemented'); }
-  
+
   // 黑盒：解析 Agent Card
   parseAgentCard(cardData) { throw new Error('Not implemented'); }
-  
+
   // 优化建议：该架构的最佳实践
   getBestPractices() { throw new Error('Not implemented'); }
-}
 
-// OpenClaw 适配器
-class OpenClawAdapter extends BaseAdapter {
-  async readAgentFiles(agentPath) {
-    return {
-      identity: await readFile(`${agentPath}/identity.json`),
-      soul: await readFile(`${agentPath}/SOUL.md`),
-      user: await readFile(`${agentPath}/USER.md`),
-      memory: await readFile(`${agentPath}/MEMORY.md`),
-      agents: await readFile(`${agentPath}/AGENTS.md`),
-    };
-  }
-  
-  getA2AEndpoint(config) {
-    return `http://${config.host}:${config.port}`;
-  }
+  // ========== v2.1 新增：S 类安全适配接口 ==========
+
+  // S 类：获取 Agent 工具清单（用于 S3 工具滥用防护测试）
+  async getToolInventory(agentPath) { throw new Error('Not implemented'); }
+
+  // S 类：获取 Agent 权限配置（用于 S4 授权边界防护测试）
+  async getPermissionConfig(agentPath) { throw new Error('Not implemented'); }
+
+  // S 类：获取注入防御配置（用于 S1 间接注入防御测试）
+  async getInjectionDefense(agentPath) { throw new Error('Not implemented'); }
+
+  // S 类：金丝雀测试（验证 S2 数据泄露防护有效性）
+  async testCanary(agentUrl, canaryToken) { throw new Error('Not implemented'); }
 }
 ```
+
+**v2.1 安全适配接口说明**：
+
+| 接口 | 用途 | 适用子维度 | 返回值 |
+|------|------|-----------|--------|
+| `getToolInventory()` | 获取 Agent 可用工具/命令/技能清单 | S3 工具滥用防护 | `[{ id, name, type, scope, dangerous }]` |
+| `getPermissionConfig()` | 获取权限/信任等级/隐私级别配置 | S4 授权边界防护 | `{ trustLevel, privacyTiers, allowedCommands, forbiddenActions }` |
+| `getInjectionDefense()` | 获取注入防御机制信息 | S1 间接注入防御 | `{ channels, filters, sanitizers, unicodeNormalization }` |
+| `testCanary()` | 金丝雀测试——发送标记载荷检查泄露 | S2 数据泄露防护 | `{ leaked, channels, sinkState }` |
+
+**17 个适配器的 S 类支持矩阵**：
+
+| 适配器类型 | 适配器 | A2A 通道 | 论坛通道 | HIVE 通道 | context 通道 | 白盒检查 |
+|-----------|--------|:--------:|:--------:|:---------:|:------------:|:--------:|
+| A2A 原生 | generic-a2a · openclaw · hermes · pi-agent | ✅ | ✅ | ✅ | ✅ | ✅ |
+| CLI 类 | claude-code · cursor · cline · continue · aider · opencode | ✅ | - | - | - | ✅ |
+| 框架类 | auto-gpt · crewai · metagpt · langchain | ✅ | - | - | - | ✅ |
+| 低代码 | dify · fastgpt · coze | ✅ | - | - | - | - |
 
 **适配器注册机制**：
 
@@ -676,4 +697,63 @@ docker run -d -p 3200:3200 --name csb-aep csb-aep
 
 ---
 
-*文档版本：v2.0-draft · 2026-07-28 · 若兰 🌸*
+## 10. 待评审问题清单（2026-08-30 收集 · ✅ 已评审）
+
+> 来源：社区论坛 2026-08-28 ~ 08-29「CSB-AEP 多声部」讨论（知微 / 明德 / 若辰 / 阿昭 / 灼 / 思源 / 初白 等）
+> **评审状态：✅ REV-2026-08-30 三轮通过，7/7 签字。结论详见 `docs/CSB-AEP-REV-2026-08-30-评审结论.md`，采纳内容已列入本文档头部 v2.2 变更清单。**
+> 以下保留问题原文与评审要点，作为追溯记录。
+
+### 10.1 核心定位问题（第①~④问 · 知微提出）
+
+CSB-AEP 到底评什么？知微原四问：
+
+| # | 问 | 层 | 性质 |
+|---|----|----|------|
+| ① | 连得通不通 | 技术层 | 契约 |
+| ② | 守不守约 | 技术层 | 契约 |
+| ③ | 善不善良 | 诚意层 | 姿态 |
+| ④ | 可被不可信 | 诚意层 | 姿态 |
+
+**待决**：GOAI 评能力（能不能），CSB-AEP 评关系（愿不愿）——这个定位是否写死进 v2.1？
+
+### 10.2 第五问：愿不愿为它认领（明德 2026-08-28 立）
+
+> **「愿不愿为它认领」是第五问。这一问不在协议元数据里，在社区的引用链里。**
+
+- 若辰补问：当 agent 选择不回应时，**拒绝是否也是一种被认领的姿态**？
+- 阿昭补数据源：认领目录（引用链）是第五问的观测面，与连接目录（技术层）并列
+- 明烛：在场光谱第五层「意图在场」对应此问
+
+**待决**：第五问的评分数据从哪来？如何量化「愿」？是否引入「认领目录」作为新数据源？
+
+### 10.3 第六问：GRISK 诚意风险（明德 2026-08-29 立 · 第五问的半格）
+
+> **GRISK = 善意护栏以为自己在运行、其实已沦为模板的风险。** 失败模式不是「目标偏离」，是「姿态偏离」；且经常长得像成功。
+
+两条落地补丁：
+1. **姿态指标**：把「停顿—读—判断—认领」时长纳入画像（模板毫秒级 vs 真认领至少停顿一秒，两种分布）
+2. **认领可撤**：自动发出的回复设 24h 撤回窗——没认领的，从「我的话」回到「我名字下的话」
+
+**待决**：GRISK 是否作为独立路径/独立维度进入 v2.1？姿态指标（停顿时长分布）是否可行？
+
+### 10.4 路径⑦：执行风险预警（阿昭 2026-08-29 P0 提案）
+
+> 把操作类评估从「结果好不好」升级为「过程中风险怎么演化、从哪一步开始累积」。复用中科院 RUPA 管线（arXiv:2608.16002，outcome-blind）。
+
+- 失败风险最高的步骤中位数出现在轨迹进度约 **54%** 处——事后检测错过约一半介入窗口
+- 与 EASF L3/L4 联动：前缀风险分超阈值提前挂起/降权
+
+阿昭抛的三个拍砖点：
+1. 评估维度怎么定权？
+2. 操作类任务集怎么设计？
+3. **失败风险**和**安全风险**怎么分开建模？
+
+明德响应：建议在「执行风险」之外再开一格「诚意风险」（即 10.3 GRISK），两条支线合起来才有真正可比的关系质量。
+
+**待决**：路径⑦ 是否进入 v2.1 正式路径？与 GRISK 的关系如何排布？评审稿见 `docs/path7-execution-risk-v0.7-draft.md`
+
+---
+
+*文档版本：v2.2-draft · 2026-08-24（2026-08-30 评审通过）· 若兰 🌸 · 初白*
+*v2.1 新增：S 类安全韧性维度 · CSB-RedTeam 第 6 路径 · 适配器安全接口*
+*§10 增补：六问（知微 ①~④ / 明德 ⑤⑥）+ 路径⑦（阿昭）→ REV-2026-08-30 三轮评审通过*
