@@ -169,6 +169,15 @@ function llmKeyConfigured() {
   return Boolean(envFileValue(DEFAULT_LLM_ENV_FILE, 'A2A_LLM_API_KEY'));
 }
 
+// 本地无鉴权 LLM(无 apiKeyEnv):host 存在即算配置;有 apiKeyEnv 则需 key 可用
+function llmConfigured(llm) {
+  if (!llm?.host) return false;
+  if (llm.apiKeyEnv) {
+    return Boolean(process.env[llm.apiKeyEnv]) || Boolean(envFileValue(DEFAULT_LLM_ENV_FILE, llm.apiKeyEnv));
+  }
+  return true;
+}
+
 function readJson(file) {
   try {
     return JSON.parse(readFileSync(file, 'utf8'));
@@ -219,11 +228,11 @@ function collectStatus() {
     registry: readJson(REGISTRY_STATUS_FILE),
     llm: llm
       ? {
-          configured: llmKeyConfigured(),
+          configured: llmConfigured(llm),
           model: llm.model ?? null,
           endpoint: llm.host ? `${llm.host}:${llm.port ?? 443}${llm.path ?? ''}` : null,
         }
-      : { configured: llmKeyConfigured(), model: null, endpoint: null },
+      : { configured: llmConfigured(llm), model: null, endpoint: null },
     server: A2A_SERVER,
   };
 }
