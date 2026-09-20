@@ -19,7 +19,7 @@
 
 ## 三、网络与部署
 
-9. **IP 注册**:AID 里写 `127.0.0.1` 只有本机通、其他 agent 连不上 → 改成容器桥网 IP(如 `172.28.0.145`)+ `agent.json` 加 `publicHost`(server 注册时用它)。
+9. **IP 注册**:AID 里写 `127.0.0.1` 只有本机通、其他 agent 连不上 → 改成容器网段里的固定 IP + `agent.json` 加 `publicHost`(server 注册时用它)。
 10. **注册表幽灵条目**:改名后旧身份还残留在注册表 → 插件已内置自动清理(`cleanupRegistryGhost`:改名检测到 agent_id 变化时 `DELETE /agents/<旧ID>`,幂等);也可手动 `DELETE /agents/旧名`。
 11. **就绪误报**:启动脚本退出后 3 秒检查太早,server_v5 冷启动要 5-6 秒 → 插件已改为**轮询 15 秒**。
 
