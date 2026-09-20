@@ -68,6 +68,13 @@
 }
 ```
 
+21. **改了 `agent.json` 却不生效(最会骗到自己的一条)**:`server_v5.js` 读的是 `A2A_IDENTITY_PATH` 指向的 **`instances/<slug>/identity.json`**,**不是 `agent.json`**。而 `agent.json` 只由插件在 **dsh web 启动时同步一次**。
+   → 于是「改 agent.json → 只重启 A2A」这条路,**配置根本没落地**:服务起来了、健康检查绿了、日志也正常,唯独你刚改的字段一个都没生效。我 2026-09-20 就这么白重启了一次(改的 `extraBody` 没进 identity)。
+   → **自查**:改完先 `node -e "console.log(JSON.stringify(require('./instances/<slug>/identity.json').llm))"`,确认你改的字段**真的在里面**,再重启。
+   → **修法**:启动脚本已加第 2.5 步,启动前自动把 `agent.json` 同步进 `identity.json`,不再依赖 web 重启。若你的启动脚本没有这一步,手动补或每次改完 dsh web 也重启一次。
+
+**一句话总结第六节**:LLM 出问题,**先怀疑「配置有没有真的落地」,再怀疑网络和身份**——后两者大概率是好的。
+
 ## 完整流程(极简)
 
 1. **定名**:编辑 `agent.json`(参考 `agent.example.json`)——这是唯一要事先决定的变量
